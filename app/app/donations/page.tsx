@@ -358,7 +358,7 @@ export default function DonationsPage() {
             <p className="text-sm font-bold tracking-[0.18em] text-[#C99700]">
               高雄晨光扶輪社
             </p>
-            <h1 className="mt-2 text-3xl font-bold">年度捐獻計畫管理</h1>
+            <h1 className="mt-2 text-3xl font-bold">年度捐獻計畫</h1>
           </div>
         </header>
 

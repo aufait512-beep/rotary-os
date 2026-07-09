@@ -6,7 +6,7 @@ const menuItems = [
   { label: "📄 程序表", href: "/programs" },
   { label: "👥 社友管理", href: "/members" },
   { label: "💰 社費管理", href: "/dues" },
-  { label: "❤️ 年度捐獻計畫管理", href: "/donations" },
+  { label: "❤️ 年度捐獻計畫", href: "/donations" },
   { label: "AI 助理", href: "/events" },
 ];
 
@@ -15,10 +15,10 @@ export default function Home() {
     <main className="min-h-screen bg-[#F8F3E8] px-4 py-6 text-[#173B73]">
       <section className="mx-auto max-w-md">
         <div className="mb-8 text-center">
-          <p className="text-sm font-semibold tracking-[0.3em]">ROTARY OS</p>
-          <h1 className="mt-3 text-3xl font-bold">高雄晨光扶輪社</h1>
+          <p className="text-sm font-semibold tracking-[0.3em]">高雄晨光扶輪社</p>
+          <h1 className="mt-3 text-3xl font-bold">Rotary OS</h1>
           <p className="mt-2 text-sm font-semibold text-[#173B73]/70">
-            2026-2027 年度
+            高雄晨光扶輪社智慧秘書系統
           </p>
         </div>
 
@@ -26,8 +26,13 @@ export default function Home() {
           <p className="text-sm font-semibold text-[#C99700]">Rotary OS</p>
           <h2 className="mt-2 text-2xl font-bold">年度社務工作台</h2>
           <div className="mt-4 space-y-2 text-base font-semibold text-[#173B73]/80">
-            <p>集中管理活動、程序表、社友、社費與年度捐獻計畫。</p>
-            <p>先用 localStorage 測試流程，之後可再銜接正式資料庫。</p>
+            <p>
+              整合年度行事曆、例會程序表、社友管理、社費管理及年度公益捐獻計畫，
+            </p>
+            <p>
+              提供雲端同步、A4 程序表、PDF 匯出及 AI 智慧秘書功能，
+            </p>
+            <p>打造扶輪社數位化管理平台。</p>
           </div>
         </div>
 
