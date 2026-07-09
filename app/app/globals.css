@@ -1,0 +1,85 @@
+@import "tailwindcss";
+
+:root {
+  --background: #ffffff;
+  --foreground: #171717;
+}
+
+@theme inline {
+  --color-background: var(--background);
+  --color-foreground: var(--foreground);
+  --font-sans: Arial, Helvetica, sans-serif;
+  --font-mono: "Courier New", monospace;
+}
+
+@media (prefers-color-scheme: dark) {
+  :root {
+    --background: #0a0a0a;
+    --foreground: #ededed;
+  }
+}
+
+body {
+  background: var(--background);
+  color: var(--foreground);
+  font-family: Arial, Helvetica, sans-serif;
+}
+
+@media print {
+  @page {
+    size: A4 portrait;
+    margin: 0;
+  }
+
+  html,
+  body {
+    background: #ffffff !important;
+    color: #000000 !important;
+    margin: 0 !important;
+    padding: 0 !important;
+  }
+
+  body * {
+    visibility: hidden !important;
+  }
+
+  #program-sheet,
+  #program-sheet * {
+    visibility: visible !important;
+  }
+
+  #program-sheet {
+    position: absolute !important;
+    inset: 0 auto auto 0 !important;
+    width: 210mm !important;
+    min-height: 297mm !important;
+    padding: 18mm 18mm 15mm 18mm !important;
+    margin: 0 !important;
+    background: #ffffff !important;
+    box-sizing: border-box !important;
+    color: #000000 !important;
+    box-shadow: none !important;
+  }
+
+  header,
+  footer,
+  nav,
+  aside,
+  button,
+  form,
+  .print-hidden {
+    display: none !important;
+  }
+}
+
+.program-sheet {
+  width: 210mm;
+  min-height: 297mm;
+  padding: 18mm 18mm 15mm 18mm;
+  background: white;
+  color: black;
+  box-sizing: border-box;
+  font-family: "DFKai-SB", "標楷體", "KaiTi", serif;
+  font-size: 16pt;
+  line-height: 1.45;
+}
