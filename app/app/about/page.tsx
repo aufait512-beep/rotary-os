@@ -25,7 +25,7 @@ export default function AboutPage() {
 
             <div>
               <p className="text-[#C99700]">Powered by</p>
-              <p className="mt-1 text-lg font-bold">Jane AI</p>
+              <p className="mt-1 text-lg font-bold">Jade AI</p>
             </div>
 
             <div className="pt-4 text-xs leading-6 text-gray-500">

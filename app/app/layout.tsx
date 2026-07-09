@@ -12,7 +12,7 @@ function AppFooter() {
     <footer className="bg-[#F8F3E8] px-4 py-6 text-center text-xs leading-6 text-gray-500">
       <p>Rotary OS v1.0.0</p>
       <p>© 2026 Jadecode Studio. All rights reserved.</p>
-      <p>Powered by Jane AI</p>
+      <p>Powered by Jade AI</p>
     </footer>
   );
 }
