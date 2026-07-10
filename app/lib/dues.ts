@@ -1,4 +1,26 @@
-export type PaymentMethod = "現金" | "轉帳" | "其他" | "未付款";
+export type PaymentMethod = "轉帳" | "信用卡扣" | "現金";
+
+export type DuesLineItemType =
+  | "meal"
+  | "annual_fee"
+  | "special_donation"
+  | "red_box"
+  | "rotary_foundation"
+  | "pass_through"
+  | "legacy";
+
+export type DuesLineItem = {
+  id: string;
+  duesRecordId: string;
+  itemType: DuesLineItemType;
+  itemName: string;
+  serviceDate: string;
+  quantity: number;
+  unitAmount: number;
+  amount: number;
+  note: string;
+  createdAt: string;
+};
 
 export type DuesRecord = {
   id: string;
@@ -12,6 +34,7 @@ export type DuesRecord = {
   paymentMethod: PaymentMethod;
   note: string;
   createdAt: string;
+  lineItems: DuesLineItem[];
 };
 
 export const DUES_STORAGE_KEY = "rotary-os-dues-records";
@@ -24,8 +47,9 @@ export const emptyDuesRecord: Omit<DuesRecord, "id" | "createdAt"> = {
   paidAmount: 0,
   discountAmount: 0,
   paymentDate: "",
-  paymentMethod: "未付款",
+  paymentMethod: "轉帳",
   note: "",
+  lineItems: [],
 };
 
 export function readDuesRecordsFromStorage(): DuesRecord[] {
@@ -58,8 +82,7 @@ export function calculateDuesBalance(record: DuesRecord) {
   return (
     record.previousBalance +
     record.currentDue -
-    record.paidAmount -
-    record.discountAmount
+    record.paidAmount
   );
 }
 
@@ -82,6 +105,7 @@ function normalizeDuesRecord(record: Partial<DuesRecord>): DuesRecord {
     paymentMethod: normalizePaymentMethod(record.paymentMethod),
     note: record.note ?? "",
     createdAt: record.createdAt ?? new Date().toISOString(),
+    lineItems: Array.isArray(record.lineItems) ? record.lineItems : [],
   };
 }
 
@@ -89,11 +113,10 @@ function normalizePaymentMethod(paymentMethod: unknown): PaymentMethod {
   if (
     paymentMethod === "現金" ||
     paymentMethod === "轉帳" ||
-    paymentMethod === "其他" ||
-    paymentMethod === "未付款"
+    paymentMethod === "信用卡扣"
   ) {
     return paymentMethod;
   }
 
-  return "未付款";
+  return "轉帳";
 }

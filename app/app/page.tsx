@@ -6,6 +6,7 @@ const menuItems = [
   { label: "📄 程序表", href: "/programs" },
   { label: "👥 社友管理", href: "/members" },
   { label: "💰 社費管理", href: "/dues" },
+  { label: "📊 會計收支", href: "/accounting" },
   { label: "❤️ 年度捐獻計畫", href: "/donations" },
   { label: "AI 助理", href: "/events" },
 ];

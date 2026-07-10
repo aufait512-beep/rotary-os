@@ -5,9 +5,10 @@ import { FormEvent, useEffect, useMemo, useState } from "react";
 import {
   emptyEventItem,
   EventItem,
+  RotaryYear,
   sortEventsByDate,
 } from "@/lib/events";
-import { deleteEvent, fetchEvents, upsertEvent } from "@/lib/supabaseData";
+import { deleteEvent, fetchEvents, fetchRotaryYears, upsertEvent } from "@/lib/supabaseData";
 
 type EventFormState = Omit<EventItem, "id">;
 type EventField = keyof EventFormState;
@@ -37,6 +38,7 @@ const buttonShadow =
 
 export default function EventsPage() {
   const [events, setEvents] = useState<EventItem[]>([]);
+  const [years, setYears] = useState<RotaryYear[]>([]);
   const [form, setForm] = useState<EventFormState>(emptyEventItem);
   const [editingId, setEditingId] = useState<string | null>(null);
   const [errorMessage, setErrorMessage] = useState("");
@@ -46,7 +48,19 @@ export default function EventsPage() {
   async function loadEvents() {
     try {
       setErrorMessage("");
-      setEvents(await fetchEvents());
+      const [loadedEvents, loadedYears] = await Promise.all([
+        fetchEvents(),
+        fetchRotaryYears(),
+      ]);
+      setEvents(loadedEvents);
+      setYears(loadedYears);
+      const activeYear = loadedYears.find((year) => year.isActive);
+      if (activeYear) {
+        setForm((currentForm) => ({
+          ...currentForm,
+          rotaryYearId: currentForm.rotaryYearId || activeYear.id,
+        }));
+      }
     } catch (error) {
       setErrorMessage(getErrorMessage(error, "活動資料讀取失敗"));
     }
@@ -95,6 +109,7 @@ export default function EventsPage() {
 
   function handleEdit(eventItem: EventItem) {
     setForm({
+      rotaryYearId: eventItem.rotaryYearId,
       title: eventItem.title,
       eventType: eventItem.eventType,
       meetingNo: eventItem.meetingNo,
@@ -172,6 +187,22 @@ export default function EventsPage() {
               </button>
             ) : null}
           </div>
+
+          <label className="block">
+            <span className="text-sm font-bold">年度</span>
+            <select
+              value={form.rotaryYearId}
+              onChange={(event) => updateField("rotaryYearId", event.target.value)}
+              className="mt-2 w-full rounded-2xl border border-[#E5D9BD] bg-white px-4 py-3 text-base text-[#173B73] outline-none transition focus:border-[#173B73] focus:ring-2 focus:ring-[#F7C948]"
+            >
+              <option value="">未指定年度</option>
+              {years.map((year) => (
+                <option key={year.id} value={year.id}>
+                  {year.displayName || year.name}
+                </option>
+              ))}
+            </select>
+          </label>
 
           {eventFields.map((field) => (
             <label key={field.name} className="block">

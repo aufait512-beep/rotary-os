@@ -1,5 +1,6 @@
 export type EventItem = {
   id: string;
+  rotaryYearId: string;
   title: string;
   eventType: string;
   meetingNo: string;
@@ -18,6 +19,7 @@ export type EventItem = {
 export const EVENTS_STORAGE_KEY = "rotary-os-events";
 
 export const emptyEventItem: Omit<EventItem, "id"> = {
+  rotaryYearId: "",
   title: "",
   eventType: "",
   meetingNo: "",
@@ -61,6 +63,18 @@ export function writeEventsToStorage(events: EventItem[]) {
 
 export function sortEventsByDate(events: EventItem[]) {
   return [...events].sort((firstEvent, secondEvent) =>
-    firstEvent.date.localeCompare(secondEvent.date)
+    `${firstEvent.date} ${firstEvent.meetingTime}`.localeCompare(
+      `${secondEvent.date} ${secondEvent.meetingTime}`
+    )
   );
 }
+
+export type RotaryYear = {
+  id: string;
+  name: string;
+  displayName: string;
+  startDate: string;
+  endDate: string;
+  isActive: boolean;
+  createdAt: string;
+};

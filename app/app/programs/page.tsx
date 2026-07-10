@@ -35,6 +35,8 @@ export default function ProgramsPage() {
   const [editingId, setEditingId] = useState<string | null>(null);
   const [isExportingPdf, setIsExportingPdf] = useState(false);
   const [errorMessage, setErrorMessage] = useState("");
+  const [programNotice, setProgramNotice] = useState("");
+  const [showAllEvents, setShowAllEvents] = useState(false);
 
   const sortedEvents = useMemo(() => sortEventsByDate(events), [events]);
   const sortedPrograms = useMemo(
@@ -45,24 +47,45 @@ export default function ProgramsPage() {
     () => sortedEvents.find((eventItem) => eventItem.id === form.eventId),
     [form.eventId, sortedEvents]
   );
+  const selectableEvents = useMemo(
+    () =>
+      showAllEvents
+        ? sortedEvents
+        : sortedEvents.filter((eventItem) => isMeetingEvent(eventItem)),
+    [showAllEvents, sortedEvents]
+  );
   const activeEvent = selectedEvent ?? programToEventFallback(form);
   const upcomingEvents = useMemo(
-    () => getUpcomingEvents(form.eventId, sortedEvents),
-    [form.eventId, sortedEvents]
+    () => getUpcomingEvents(activeEvent, sortedEvents),
+    [activeEvent, sortedEvents]
   );
 
   async function loadData() {
-    try {
-      setErrorMessage("");
-      const [loadedEvents, loadedPrograms] = await Promise.all([
-        fetchEvents(),
-        fetchPrograms(),
-      ]);
-      setEvents(loadedEvents);
-      setPrograms(loadedPrograms);
-    } catch (error) {
-      setErrorMessage(getErrorMessage(error, "程序表資料讀取失敗"));
+    setErrorMessage("");
+    setProgramNotice("");
+
+    const [eventsResult, programsResult] = await Promise.allSettled([
+      fetchEvents(),
+      fetchPrograms(),
+    ]);
+
+    if (eventsResult.status === "rejected") {
+      console.error(eventsResult.reason);
+      setErrorMessage(getErrorMessage(eventsResult.reason, "活動資料讀取失敗"));
+      return;
     }
+
+    const loadedEvents = eventsResult.value;
+    setEvents(loadedEvents);
+
+    if (programsResult.status === "rejected") {
+      console.error(programsResult.reason);
+      setErrorMessage(getErrorMessage(programsResult.reason, "程序表資料查詢失敗"));
+      setPrograms([]);
+    } else {
+      setPrograms(programsResult.value);
+    }
+
   }
 
   useEffect(() => {
@@ -127,7 +150,22 @@ export default function ProgramsPage() {
       setForm((currentForm) => ({ ...currentForm, eventId: "" }));
       return;
     }
+    applyEventToForm(eventForProgram, programs);
+  }
 
+  function applyEventToForm(eventForProgram: EventItem, loadedPrograms: ProgramItem[]) {
+    const existingProgram = loadedPrograms.find(
+      (program) => program.eventId === eventForProgram.id
+    );
+
+    if (existingProgram) {
+      handleEdit(existingProgram, false);
+      setProgramNotice("");
+      return;
+    }
+
+    setEditingId(null);
+    setProgramNotice("尚未建立程序表");
     setForm((currentForm) => ({
       ...currentForm,
       eventId: eventForProgram.id,
@@ -141,6 +179,18 @@ export default function ProgramsPage() {
       speaker: eventForProgram.speaker,
     }));
   }
+
+  useEffect(() => {
+    if (form.eventId || sortedEvents.length === 0) {
+      return;
+    }
+
+    const defaultEvent = findDefaultWeeklyMeeting(sortedEvents);
+    if (defaultEvent) {
+      applyEventToForm(defaultEvent, programs);
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [form.eventId, programs, sortedEvents]);
 
   async function handleSubmit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
@@ -169,7 +219,7 @@ export default function ProgramsPage() {
     resetForm();
   }
 
-  function handleEdit(program: ProgramItem) {
+  function handleEdit(program: ProgramItem, scrollToTop = true) {
     setForm({
       eventId: program.eventId,
       meetingName: program.meetingName,
@@ -184,7 +234,10 @@ export default function ProgramsPage() {
       sergeantAtArms: program.sergeantAtArms,
     });
     setEditingId(program.id);
-    window.scrollTo({ top: 0, behavior: "smooth" });
+    setProgramNotice("");
+    if (scrollToTop) {
+      window.scrollTo({ top: 0, behavior: "smooth" });
+    }
   }
 
   async function handleDelete(programId: string) {
@@ -227,6 +280,11 @@ export default function ProgramsPage() {
             {errorMessage}
           </p>
         ) : null}
+        {programNotice ? (
+          <p className="mx-auto max-w-md rounded-2xl bg-white/80 p-4 text-sm font-bold text-[#173B73]/75 print:hidden">
+            {programNotice}
+          </p>
+        ) : null}
 
         <form
           onSubmit={handleSubmit}
@@ -255,13 +313,21 @@ export default function ProgramsPage() {
               className="mt-2 w-full rounded-2xl border border-[#E5D9BD] bg-white px-4 py-3 text-base font-semibold text-[#173B73] outline-none transition focus:border-[#173B73] focus:ring-2 focus:ring-[#F7C948]"
             >
               <option value="">請選擇一場活動</option>
-              {sortedEvents.map((eventItem) => (
+              {selectableEvents.map((eventItem) => (
                 <option key={eventItem.id} value={eventItem.id}>
-                  {eventItem.date || "未填日期"}{" "}
-                  {eventItem.title || "未命名活動"}
+                  {formatEventOption(eventItem)}
                 </option>
               ))}
             </select>
+          </label>
+
+          <label className="flex items-center gap-2 text-sm font-bold">
+            <input
+              type="checkbox"
+              checked={showAllEvents}
+              onChange={(event) => setShowAllEvents(event.target.checked)}
+            />
+            查看其他活動
           </label>
 
           <label className="block">
@@ -500,18 +566,36 @@ function UpcomingEventsTable({ events }: { events: EventItem[] }) {
   );
 }
 
-function getUpcomingEvents(eventId: string, events: EventItem[]) {
-  const selectedIndex = events.findIndex((eventItem) => eventItem.id === eventId);
-  if (selectedIndex >= 0) {
-    return events.slice(selectedIndex + 1, selectedIndex + 6);
+function getUpcomingEvents(activeEvent: EventItem, events: EventItem[]) {
+  const activeDate = parseDate(activeEvent.date);
+  if (!activeDate) {
+    return [];
   }
 
-  return events.slice(0, 5);
+  const nextMonth = new Date(activeDate.getFullYear(), activeDate.getMonth() + 1, 1);
+  const nextMonthEnd = new Date(activeDate.getFullYear(), activeDate.getMonth() + 2, 0);
+
+  return sortEventsByDate(
+    events.filter((eventItem) => {
+      const eventDate = parseDate(eventItem.date);
+      if (!eventDate || eventItem.id === activeEvent.id || eventDate <= activeDate) {
+        return false;
+      }
+
+      const sameMonthAfter =
+        eventDate.getFullYear() === activeDate.getFullYear() &&
+        eventDate.getMonth() === activeDate.getMonth();
+      const inNextMonth = eventDate >= nextMonth && eventDate <= nextMonthEnd;
+
+      return sameMonthAfter || inNextMonth;
+    })
+  );
 }
 
 function programToEventFallback(program: ProgramFormState): EventItem {
   return {
     id: program.eventId,
+    rotaryYearId: "",
     title: program.meetingName,
     eventType: "",
     meetingNo: "",
@@ -595,6 +679,34 @@ function parseDate(dateValue: string) {
   }
 
   return date;
+}
+
+function isMeetingEvent(eventItem: EventItem) {
+  return eventItem.eventType.includes("例會") || eventItem.meetingNo.trim() !== "";
+}
+
+function findDefaultWeeklyMeeting(events: EventItem[]) {
+  const today = new Date();
+  const day = today.getDay();
+  const mondayOffset = day === 0 ? -6 : 1 - day;
+  const monday = new Date(today);
+  monday.setHours(0, 0, 0, 0);
+  monday.setDate(today.getDate() + mondayOffset);
+  const sunday = new Date(monday);
+  sunday.setDate(monday.getDate() + 6);
+
+  const weeklyMeetings = sortEventsByDate(events).filter((eventItem) => {
+    if (!isMeetingEvent(eventItem)) return false;
+    const eventDate = parseDate(eventItem.date);
+    return eventDate ? eventDate >= monday && eventDate <= sunday : false;
+  });
+
+  return weeklyMeetings[0] ?? sortEventsByDate(events).find(isMeetingEvent) ?? null;
+}
+
+function formatEventOption(eventItem: EventItem) {
+  const meetingNo = eventItem.meetingNo ? `第${eventItem.meetingNo}次例會` : "一般活動";
+  return `${meetingNo}｜${formatDateSlash(eventItem.date)}｜${eventItem.title || "未命名活動"}`;
 }
 
 function getErrorMessage(error: unknown, fallback: string) {

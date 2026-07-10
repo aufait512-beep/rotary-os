@@ -1,6 +1,6 @@
 import { supabase } from "@/src/lib/supabase";
-import { DuesRecord, PaymentMethod } from "@/lib/dues";
-import { EventItem } from "@/lib/events";
+import { DuesLineItem, DuesRecord, PaymentMethod } from "@/lib/dues";
+import { EventItem, RotaryYear } from "@/lib/events";
 import { Member, normalizeMember, sortMembersByName } from "@/lib/members";
 import { ProgramItem } from "@/lib/programs";
 
@@ -49,6 +49,15 @@ export async function fetchEvents() {
   return (data ?? []).map(mapEventFromRow);
 }
 
+export async function fetchRotaryYears() {
+  const { data, error } = await supabase
+    .from("rotary_years")
+    .select("*")
+    .order("start_date", { ascending: false });
+  if (error) throw error;
+  return (data ?? []).map(mapRotaryYearFromRow);
+}
+
 export async function upsertEvent(eventItem: EventItem) {
   const { data, error } = await supabase
     .from("events")
@@ -89,30 +98,79 @@ export async function deleteProgram(programId: string) {
 }
 
 export async function fetchDuesRecords() {
-  const { data, error } = await supabase
+  const [{ data, error }, lineItemResult] = await Promise.all([
+    supabase
     .from("dues_records")
     .select("*")
-    .order("period_month", { ascending: false });
+      .order("period_month", { ascending: false }),
+    supabase.from("dues_line_items").select("*").order("created_at", { ascending: true }),
+  ]);
   if (error) throw error;
-  return (data ?? []).map(mapDuesRecordFromRow);
+  if (lineItemResult.error) throw lineItemResult.error;
+
+  const lineItems = (lineItemResult.data ?? []).map(mapDuesLineItemFromRow);
+  return (data ?? []).map((row) =>
+    mapDuesRecordFromRow(
+      row,
+      lineItems.filter((item) => item.duesRecordId === text(row.id))
+    )
+  );
 }
 
-export async function upsertDuesRecord(record: DuesRecord) {
+export async function upsertDuesRecord(record: DuesRecord, lineItems = record.lineItems) {
+  const normalizedRecord = {
+    ...record,
+    currentDue: sumLineItems(lineItems) || record.currentDue,
+  };
   const { data, error } = await supabase
     .from("dues_records")
-    .upsert(mapDuesRecordToRow(record), { onConflict: "id" })
+    .upsert(mapDuesRecordToRow(normalizedRecord), { onConflict: "id" })
     .select()
     .single();
   if (error) throw error;
-  return mapDuesRecordFromRow(data);
+
+  const recordId = text(data.id);
+  const nextLineItems = lineItems.map((item) => ({ ...item, duesRecordId: recordId }));
+  const { error: deleteError } = await supabase
+    .from("dues_line_items")
+    .delete()
+    .eq("dues_record_id", recordId);
+  if (deleteError) throw deleteError;
+
+  if (nextLineItems.length > 0) {
+    const { error: insertError } = await supabase
+      .from("dues_line_items")
+      .insert(nextLineItems.map(mapDuesLineItemToRow));
+    if (insertError) throw insertError;
+  }
+
+  return mapDuesRecordFromRow(data, nextLineItems);
 }
 
 export async function deleteDuesRecord(recordId: string) {
+  const lineItemDelete = await supabase
+    .from("dues_line_items")
+    .delete()
+    .eq("dues_record_id", recordId);
+  if (lineItemDelete.error) throw lineItemDelete.error;
+
   const { error } = await supabase
     .from("dues_records")
     .delete()
     .eq("id", recordId);
   if (error) throw error;
+}
+
+function mapRotaryYearFromRow(row: DbRecord): RotaryYear {
+  return {
+    id: text(row.id),
+    name: text(row.name),
+    displayName: text(row.display_name),
+    startDate: text(row.start_date),
+    endDate: text(row.end_date),
+    isActive: Boolean(row.is_active),
+    createdAt: text(row.created_at),
+  };
 }
 
 function mapMemberFromRow(row: DbRecord): Member {
@@ -181,6 +239,7 @@ function mapMemberFieldsToRow(member: Member) {
 function mapEventFromRow(row: DbRecord): EventItem {
   return {
     id: text(row.id),
+    rotaryYearId: text(row.rotary_year_id),
     title: text(row.title),
     eventType: text(row.event_type),
     meetingNo: text(row.meeting_no),
@@ -200,6 +259,7 @@ function mapEventFromRow(row: DbRecord): EventItem {
 function mapEventToRow(eventItem: EventItem) {
   return {
     id: eventItem.id,
+    rotary_year_id: eventItem.rotaryYearId || null,
     title: eventItem.title,
     event_type: eventItem.eventType,
     meeting_no: eventItem.meetingNo,
@@ -250,19 +310,39 @@ function mapProgramToRow(program: ProgramItem) {
   };
 }
 
-function mapDuesRecordFromRow(row: DbRecord): DuesRecord {
+function mapDuesRecordFromRow(row: DbRecord, lineItems: DuesLineItem[] = []): DuesRecord {
+  const legacyCurrentDue = number(row.current_due);
   return {
     id: text(row.id),
     memberId: text(row.member_id),
     periodMonth: text(row.period_month),
     previousBalance: number(row.previous_balance),
-    currentDue: number(row.current_due),
+    currentDue: lineItems.length > 0 ? sumLineItems(lineItems) : legacyCurrentDue,
     paidAmount: number(row.paid_amount),
     discountAmount: number(row.discount_amount),
     paymentDate: text(row.payment_date),
     paymentMethod: normalizePaymentMethod(text(row.payment_method)),
     note: text(row.note),
     createdAt: text(row.created_at) || new Date().toISOString(),
+    lineItems:
+      lineItems.length > 0
+        ? lineItems
+        : legacyCurrentDue > 0
+          ? [
+              {
+                id: `legacy-${text(row.id)}`,
+                duesRecordId: text(row.id),
+                itemType: "legacy",
+                itemName: "舊資料總額",
+                serviceDate: "",
+                quantity: 1,
+                unitAmount: legacyCurrentDue,
+                amount: legacyCurrentDue,
+                note: "舊資料總額",
+                createdAt: text(row.created_at) || new Date().toISOString(),
+              },
+            ]
+          : [],
   };
 }
 
@@ -281,12 +361,60 @@ function mapDuesRecordToRow(record: DuesRecord) {
   };
 }
 
+function mapDuesLineItemFromRow(row: DbRecord): DuesLineItem {
+  return {
+    id: text(row.id),
+    duesRecordId: text(row.dues_record_id),
+    itemType: normalizeLineItemType(text(row.item_type)),
+    itemName: text(row.item_name),
+    serviceDate: text(row.service_date),
+    quantity: number(row.quantity) || 1,
+    unitAmount: number(row.unit_amount),
+    amount: number(row.amount),
+    note: text(row.note),
+    createdAt: text(row.created_at) || new Date().toISOString(),
+  };
+}
+
+function mapDuesLineItemToRow(item: DuesLineItem) {
+  return {
+    id: item.id.startsWith("legacy-") ? crypto.randomUUID() : item.id,
+    dues_record_id: item.duesRecordId,
+    item_type: item.itemType === "legacy" ? "pass_through" : item.itemType,
+    item_name: item.itemName,
+    service_date: emptyToNull(item.serviceDate),
+    quantity: item.quantity,
+    unit_amount: item.unitAmount,
+    amount: item.amount,
+    note: item.note,
+  };
+}
+
 function normalizePaymentMethod(value: string): PaymentMethod {
-  if (value === "現金" || value === "轉帳" || value === "其他") {
+  if (value === "現金" || value === "轉帳" || value === "信用卡扣") {
     return value;
   }
 
-  return "未付款";
+  return "轉帳";
+}
+
+function normalizeLineItemType(value: string): DuesLineItem["itemType"] {
+  if (
+    value === "meal" ||
+    value === "annual_fee" ||
+    value === "special_donation" ||
+    value === "red_box" ||
+    value === "rotary_foundation" ||
+    value === "pass_through"
+  ) {
+    return value;
+  }
+
+  return "pass_through";
+}
+
+function sumLineItems(lineItems: DuesLineItem[]) {
+  return lineItems.reduce((total, item) => total + item.amount, 0);
 }
 
 function text(value: unknown) {
