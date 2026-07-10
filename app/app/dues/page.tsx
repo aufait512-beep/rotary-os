@@ -60,18 +60,6 @@ export default function DuesPage() {
       ),
     [records]
   );
-  const memberBalances = useMemo(
-    () =>
-      sortedMembers
-        .map((member) => ({
-          member,
-          balance: records
-            .filter((record) => record.memberId === member.id)
-            .reduce((total, record) => total + calculateDuesBalance(record), 0),
-        }))
-        .filter((item) => item.balance !== 0),
-    [records, sortedMembers]
-  );
   const currentDue = calculateLineItemsTotal(form.lineItems);
   const currentBalance =
     form.previousBalance +
@@ -422,25 +410,6 @@ export default function DuesPage() {
             <p className="text-sm font-bold text-[#C99700]">未繳總額</p>
             <p className="mt-1 text-3xl font-bold">{formatCurrency(totalUnpaid)}</p>
           </div>
-        </section>
-
-        <section className="space-y-3">
-          <h2 className="text-2xl font-bold">每位社員目前欠款</h2>
-          {memberBalances.length === 0 ? (
-            <div className="rounded-3xl bg-white/75 p-5 text-center font-semibold text-[#173B73]/70 shadow-[6px_6px_16px_rgba(0,0,0,0.1),-6px_-6px_16px_rgba(255,255,255,0.8)]">
-              目前沒有欠款
-            </div>
-          ) : (
-            memberBalances.map(({ member, balance }) => (
-              <div
-                key={member.id}
-                className="flex items-center justify-between rounded-3xl bg-white/85 p-5 font-bold shadow-[8px_8px_20px_rgba(0,0,0,0.12),-8px_-8px_20px_rgba(255,255,255,0.9)]"
-              >
-                <span>{formatMemberName(member)}</span>
-                <span>{formatCurrency(balance)}</span>
-              </div>
-            ))
-          )}
         </section>
 
         <section className="space-y-3">

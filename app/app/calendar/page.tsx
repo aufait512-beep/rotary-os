@@ -14,6 +14,8 @@ export default function CalendarPage() {
   const [selectedYearId, setSelectedYearId] = useState("");
   const [currentMonth, setCurrentMonth] = useState("");
   const [errorMessage, setErrorMessage] = useState("");
+  const [expandedEventId, setExpandedEventId] = useState("");
+  const [highlightedEventId, setHighlightedEventId] = useState("");
 
   async function loadData() {
     try {
@@ -67,6 +69,19 @@ export default function CalendarPage() {
     () => annualEvents.filter((eventItem) => eventItem.date.startsWith(currentMonth)),
     [annualEvents, currentMonth]
   );
+
+  function focusAnnualEvent(eventId: string) {
+    setExpandedEventId(eventId);
+    setHighlightedEventId(eventId);
+
+    window.setTimeout(() => {
+      document
+        .getElementById(`event-${eventId}`)
+        ?.scrollIntoView({ behavior: "smooth", block: "center" });
+    }, 0);
+
+    window.setTimeout(() => setHighlightedEventId(""), 1800);
+  }
 
   return (
     <main className="min-h-screen bg-[#F8F3E8] px-4 py-6 text-[#173B73]">
@@ -142,10 +157,17 @@ export default function CalendarPage() {
                 </div>
               </div>
 
-              <CalendarGrid month={currentMonth} events={monthEvents} />
+              <CalendarGrid
+                month={currentMonth}
+                events={monthEvents}
+                onFocusEvent={focusAnnualEvent}
+              />
             </section>
 
-            <section className="rounded-3xl bg-white/85 p-5 shadow-[8px_8px_20px_rgba(0,0,0,0.12),-8px_-8px_20px_rgba(255,255,255,0.9)]">
+            <section
+              id="annual-events-list"
+              className="rounded-3xl bg-white/85 p-5 shadow-[8px_8px_20px_rgba(0,0,0,0.12),-8px_-8px_20px_rgba(255,255,255,0.9)]"
+            >
               <div className="flex items-center justify-between gap-3">
                 <h2 className="text-xl font-bold">年度活動清單</h2>
                 <Link
@@ -162,22 +184,93 @@ export default function CalendarPage() {
                     目前年度區間內沒有活動
                   </div>
                 ) : (
-                  annualEvents.map((eventItem) => (
-                    <article
-                      key={eventItem.id}
-                      className="rounded-3xl border border-[#E5D9BD] bg-white p-4"
-                    >
-                      <p className="text-sm font-bold text-[#C99700]">
-                        {formatDate(eventItem.date)}
-                      </p>
-                      <h3 className="mt-1 break-words text-lg font-bold">
-                        {eventItem.title || "未命名活動"}
-                      </h3>
-                      <p className="mt-2 text-sm font-semibold">
-                        {eventItem.location || "-"}｜{eventItem.meetingTime || eventItem.dinnerTime || "-"}
-                      </p>
-                    </article>
-                  ))
+                  annualEvents.map((eventItem) => {
+                    const isExpanded = expandedEventId === eventItem.id;
+                    const year = years.find((item) => item.id === eventItem.rotaryYearId);
+
+                    return (
+                      <article
+                        key={eventItem.id}
+                        id={`event-${eventItem.id}`}
+                        className={`rounded-3xl border bg-white p-4 transition ${
+                          highlightedEventId === eventItem.id
+                            ? "border-[#F7C948] ring-4 ring-[#F7C948]/60"
+                            : "border-[#E5D9BD]"
+                        }`}
+                      >
+                        <button
+                          type="button"
+                          onClick={() =>
+                            setExpandedEventId((currentId) =>
+                              currentId === eventItem.id ? "" : eventItem.id
+                            )
+                          }
+                          className="w-full text-left"
+                        >
+                          <p className="text-sm font-bold text-[#C99700]">
+                            {eventItem.meetingNo
+                              ? `第${eventItem.meetingNo}次例會`
+                              : eventItem.eventType || "活動"}
+                          </p>
+                          <h3 className="mt-1 break-words text-lg font-bold">
+                            {eventItem.title || "未命名活動"}
+                          </h3>
+                          <p className="mt-2 break-words text-sm font-semibold text-[#173B73]/80">
+                            {formatDate(eventItem.date)}｜{formatEventTime(eventItem)}｜{eventItem.location || "-"}
+                          </p>
+                        </button>
+
+                        {isExpanded ? (
+                          <div className="mt-4 space-y-2 border-t border-[#E5D9BD] pt-4 text-sm font-semibold text-[#173B73]/80">
+                            <DetailRow label="年度" value={year?.displayName || year?.name || "-"} />
+                            <DetailRow label="活動類型" value={eventItem.eventType || "-"} />
+                            <DetailRow label="活動名稱" value={eventItem.title || "-"} />
+                            <DetailRow label="例會次數" value={eventItem.meetingNo || "-"} />
+                            <DetailRow label="日期" value={formatDate(eventItem.date)} />
+                            <DetailRow label="星期" value={eventItem.weekday || "-"} />
+                            <DetailRow label="餐敘時間" value={eventItem.dinnerTime || "-"} />
+                            <DetailRow label="開始時間" value={eventItem.meetingTime || "-"} />
+                            <DetailRow label="結束時間" value={eventItem.endTime || "-"} />
+                            <DetailRow label="地點" value={eventItem.location || "-"} />
+                            <DetailRow label="樓層" value={eventItem.room || "-"} />
+                            <DetailRow label="主講人" value={eventItem.speaker || "-"} />
+                            <DetailRow label="主題" value={eventItem.topic || "-"} />
+                            <DetailRow label="聯誼長" value="-" />
+                            <DetailRow label="糾察長" value="-" />
+                            <DetailRow label="活動說明" value={eventItem.note || "-"} />
+                            <DetailRow label="備註" value={eventItem.note || "-"} />
+                            <div className="grid grid-cols-2 gap-3 pt-3">
+                              <Link
+                                href="/events"
+                                className={`rounded-2xl bg-[#F7C948] py-3 text-center font-bold text-[#173B73] ${buttonShadow}`}
+                              >
+                                編輯
+                              </Link>
+                              <button
+                                type="button"
+                                onClick={() => setExpandedEventId("")}
+                                className={`rounded-2xl bg-white py-3 font-bold text-[#173B73] ${buttonShadow}`}
+                              >
+                                取消
+                              </button>
+                              <Link
+                                href="/events"
+                                className={`rounded-2xl bg-white py-3 text-center font-bold text-[#173B73] ${buttonShadow}`}
+                              >
+                                儲存
+                              </Link>
+                              <Link
+                                href="/events"
+                                className={`rounded-2xl bg-white py-3 text-center font-bold text-[#173B73] ${buttonShadow}`}
+                              >
+                                刪除
+                              </Link>
+                            </div>
+                          </div>
+                        ) : null}
+                      </article>
+                    );
+                  })
                 )}
               </div>
             </section>
@@ -188,11 +281,19 @@ export default function CalendarPage() {
   );
 }
 
-function CalendarGrid({ month, events }: { month: string; events: EventItem[] }) {
+function CalendarGrid({
+  month,
+  events,
+  onFocusEvent,
+}: {
+  month: string;
+  events: EventItem[];
+  onFocusEvent: (eventId: string) => void;
+}) {
   const cells = buildMonthCells(month);
 
   return (
-    <div className="mt-5 grid grid-cols-7 gap-1 text-center text-xs font-bold sm:text-sm">
+    <div className="mt-5 grid w-full min-w-0 grid-cols-7 gap-1 text-center text-xs font-bold sm:text-sm">
       {["一", "二", "三", "四", "五", "六", "日"].map((day) => (
         <div key={day} className="py-2 text-[#173B73]/70">
           {day}
@@ -206,7 +307,7 @@ function CalendarGrid({ month, events }: { month: string; events: EventItem[] })
         return (
           <div
             key={`${dateValue}-${index}`}
-            className="min-h-20 rounded-2xl border border-[#E5D9BD] bg-white p-2 text-left"
+            className="min-w-0 overflow-hidden rounded-2xl border border-[#E5D9BD] bg-white p-1.5 text-left sm:min-h-20 sm:p-2"
           >
             {dateValue ? (
               <>
@@ -215,15 +316,14 @@ function CalendarGrid({ month, events }: { month: string; events: EventItem[] })
                 </p>
                 <div className="mt-1 space-y-1">
                   {meetings.map((eventItem) => (
-                    <Link
+                    <button
                       key={eventItem.id}
-                      href="/events"
-                      className="block rounded-xl bg-[#F7C948] px-2 py-1 text-[11px] leading-snug text-[#173B73]"
+                      type="button"
+                      onClick={() => onFocusEvent(eventItem.id)}
+                      className="inline-flex h-5 min-w-5 items-center justify-center rounded-full bg-[#F7C948] px-1.5 text-[10px] leading-none text-[#173B73] sm:h-6 sm:min-w-6 sm:text-xs"
                     >
-                      {eventItem.meetingNo
-                        ? `第${eventItem.meetingNo}次例會`
-                        : eventItem.title || "例會"}
-                    </Link>
+                      {eventItem.meetingNo || "•"}
+                    </button>
                   ))}
                   {otherEvents.length > 0 ? (
                     <div className="flex flex-wrap gap-1">
@@ -283,4 +383,22 @@ function formatDate(dateValue: string) {
   }
 
   return dateValue.replaceAll("-", "/");
+}
+
+function formatEventTime(eventItem: EventItem) {
+  const startTime = eventItem.meetingTime || eventItem.dinnerTime;
+  if (!startTime && !eventItem.endTime) {
+    return "-";
+  }
+
+  return eventItem.endTime ? `${startTime || "-"}-${eventItem.endTime}` : startTime;
+}
+
+function DetailRow({ label, value }: { label: string; value: string }) {
+  return (
+    <p className="grid grid-cols-[5rem_1fr] gap-2 break-words">
+      <span className="text-[#173B73]">{label}</span>
+      <span>{value}</span>
+    </p>
+  );
 }
