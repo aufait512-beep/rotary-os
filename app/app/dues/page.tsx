@@ -1,20 +1,18 @@
+﻿
 "use client";
 
 import Link from "next/link";
 import { FormEvent, useEffect, useMemo, useState } from "react";
 import {
-  calculateDuesBalance,
   DuesLineItem,
   DuesRecord,
   emptyDuesRecord,
+  getDisplayDuesBalance,
+  getDuesPaymentStatus,
   PaymentMethod,
   sortDuesRecords,
 } from "@/lib/dues";
-import {
-  formatMemberName,
-  Member,
-  sortMembersByName,
-} from "@/lib/members";
+import { formatMemberName, Member, sortMembersByName } from "@/lib/members";
 import {
   deleteDuesRecord,
   fetchDuesRecords,
@@ -23,10 +21,16 @@ import {
 } from "@/lib/supabaseData";
 
 type DuesFormState = Omit<DuesRecord, "id" | "createdAt">;
-type NumericDuesField =
-  | "previousBalance"
-  | "paidAmount"
-  | "discountAmount";
+type NumericDuesField = "previousBalance" | "paidAmount";
+
+type Html2PdfWorker = {
+  set: (options: unknown) => Html2PdfWorker;
+  from: (element: HTMLElement) => Html2PdfWorker;
+  save: () => Promise<void>;
+  outputPdf: (type: "blob") => Promise<Blob>;
+};
+
+type Html2PdfFactory = () => Html2PdfWorker;
 
 const buttonShadow =
   "shadow-[6px_6px_12px_rgba(0,0,0,0.18),-4px_-4px_10px_rgba(255,255,255,0.85)] active:translate-y-1 active:shadow-inner";
@@ -42,29 +46,22 @@ export default function DuesPage() {
   const [errorMessage, setErrorMessage] = useState("");
   const [isFormOpen, setIsFormOpen] = useState(false);
   const [isLineItemsOpen, setIsLineItemsOpen] = useState(false);
+  const [expandedRecordId, setExpandedRecordId] = useState("");
+  const [previewRecordId, setPreviewRecordId] = useState("");
+  const [exportingId, setExportingId] = useState("");
 
   const sortedMembers = useMemo(() => sortMembersByName(members), [members]);
   const filteredRecords = useMemo(() => {
     const sortedRecords = sortDuesRecords(records);
-    if (!filterMonth) {
-      return sortedRecords;
-    }
-
+    if (!filterMonth) return sortedRecords;
     return sortedRecords.filter((record) => record.periodMonth === filterMonth);
   }, [records, filterMonth]);
   const totalUnpaid = useMemo(
-    () =>
-      records.reduce(
-        (total, record) => total + Math.max(0, calculateDuesBalance(record)),
-        0
-      ),
+    () => records.reduce((total, record) => total + getDisplayDuesBalance(record), 0),
     [records]
   );
-  const currentDue = calculateLineItemsTotal(form.lineItems);
-  const currentBalance =
-    form.previousBalance +
-    currentDue -
-    form.paidAmount;
+  const currentDue = getCurrentDue(form);
+  const currentBalance = Math.max(0, form.previousBalance + currentDue - form.paidAmount);
 
   async function loadData() {
     try {
@@ -116,9 +113,7 @@ export default function DuesPage() {
           createdAt: currentRecord?.createdAt ?? new Date().toISOString(),
         });
         setRecords((currentRecords) =>
-          currentRecords.map((record) =>
-            record.id === editingId ? savedRecord : record
-          )
+          currentRecords.map((record) => (record.id === editingId ? savedRecord : record))
         );
       } else {
         const savedRecord = await upsertDuesRecord({
@@ -152,14 +147,13 @@ export default function DuesPage() {
     });
     setEditingId(record.id);
     setIsFormOpen(true);
+    setExpandedRecordId(record.id);
     window.scrollTo({ top: 0, behavior: "smooth" });
   }
 
   async function handleDelete(recordId: string) {
     const confirmed = window.confirm("確定要刪除這筆社費紀錄嗎？");
-    if (!confirmed) {
-      return;
-    }
+    if (!confirmed) return;
 
     try {
       setErrorMessage("");
@@ -171,22 +165,22 @@ export default function DuesPage() {
       setErrorMessage(getErrorMessage(error, "社費紀錄刪除失敗"));
       return;
     }
-    if (editingId === recordId) {
-      resetForm();
-    }
-  }
 
+    if (editingId === recordId) resetForm();
+    if (expandedRecordId === recordId) setExpandedRecordId("");
+    if (previewRecordId === recordId) setPreviewRecordId("");
+  }
   function exportCsv() {
     const headers = [
-      "社員",
+      "社友",
       "月份",
-      "前期餘額",
+      "前期未繳",
       "本期社費",
-      "已繳金額",
-      "折扣金額",
-      "結餘",
-      "付款日期",
-      "付款方式",
+      "已繳費用",
+      "尚欠金額",
+      "付款狀態",
+      "繳費日期",
+      "繳費方式",
       "備註",
       "建立時間",
     ];
@@ -196,8 +190,8 @@ export default function DuesPage() {
       String(record.previousBalance),
       String(record.currentDue),
       String(record.paidAmount),
-      String(record.discountAmount),
-      String(calculateDuesBalance(record)),
+      String(getDisplayDuesBalance(record)),
+      getDuesPaymentStatus(record),
       record.paymentDate,
       record.paymentMethod,
       record.note,
@@ -213,12 +207,86 @@ export default function DuesPage() {
     const link = document.createElement("a");
     link.href = url;
     link.download = filterMonth
-      ? `高雄晨光扶輪社_社費_${filterMonth}.csv`
+      ? `高雄晨光扶輪社_社費紀錄_${filterMonth}.csv`
       : "高雄晨光扶輪社_社費紀錄.csv";
     link.click();
     URL.revokeObjectURL(url);
   }
 
+  async function exportStatementPdf(record: DuesRecord) {
+    const statement = document.getElementById(`dues-statement-${record.id}`);
+    if (!statement) {
+      setErrorMessage("找不到社費通知單，請先展開該筆紀錄。");
+      return;
+    }
+
+    const exportElement = createExportElement(statement);
+
+    try {
+      setErrorMessage("");
+      setExportingId(record.id);
+      const html2pdfModule = await import("html2pdf.js");
+      const html2pdf = (html2pdfModule.default ?? html2pdfModule) as Html2PdfFactory;
+
+      const pdfBlob = await html2pdf()
+        .set({
+          filename: buildStatementFilename(record, sortedMembers, "pdf"),
+          margin: 0,
+          image: { type: "jpeg", quality: 0.98 },
+          html2canvas: {
+            scale: 3,
+            useCORS: true,
+            backgroundColor: "#ffffff",
+          },
+          jsPDF: {
+            unit: "mm",
+            format: "a4",
+            orientation: "portrait",
+          },
+        })
+        .from(exportElement)
+        .outputPdf("blob");
+      downloadBlob(pdfBlob, buildStatementFilename(record, sortedMembers, "pdf"));
+    } catch (error) {
+      setErrorMessage(getErrorMessage(error, "PDF 匯出失敗"));
+    } finally {
+      exportElement.remove();
+      setExportingId("");
+    }
+  }
+
+  async function exportStatementJpg(record: DuesRecord) {
+    const statement = document.getElementById(`dues-statement-${record.id}`);
+    if (!statement) {
+      setErrorMessage("找不到社費通知單，請先展開該筆紀錄。");
+      return;
+    }
+
+    const exportElement = createExportElement(statement);
+
+    try {
+      setErrorMessage("");
+      setExportingId(record.id);
+      const html2canvasModule = await import("html2canvas");
+      const html2canvas = html2canvasModule.default;
+      const canvas = await html2canvas(exportElement, {
+        scale: 3,
+        useCORS: true,
+        backgroundColor: "#ffffff",
+      });
+      const link = document.createElement("a");
+      link.href = canvas.toDataURL("image/jpeg", 0.95);
+      link.download = buildStatementFilename(record, sortedMembers, "jpg");
+      document.body.appendChild(link);
+      link.click();
+      link.remove();
+    } catch (error) {
+      setErrorMessage(getErrorMessage(error, "JPG 匯出失敗"));
+    } finally {
+      exportElement.remove();
+      setExportingId("");
+    }
+  }
   return (
     <main className="min-h-screen bg-[#F8F3E8] px-4 py-6 text-[#173B73]">
       <section className="mx-auto max-w-md space-y-6">
@@ -228,11 +296,12 @@ export default function DuesPage() {
           </Link>
           <div>
             <p className="text-sm font-bold tracking-[0.18em] text-[#C99700]">
-              高雄晨光扶輪社
+              Rotary OS
             </p>
             <h1 className="mt-2 text-3xl font-bold">社費管理</h1>
           </div>
         </header>
+
         {errorMessage ? (
           <p className="rounded-2xl border border-red-200 bg-red-50 p-4 text-sm font-bold text-red-700">
             {errorMessage}
@@ -244,167 +313,166 @@ export default function DuesPage() {
           onClick={() => setIsFormOpen((currentValue) => !currentValue)}
           className={`w-full rounded-2xl bg-[#F7C948] py-4 font-bold ${buttonShadow}`}
         >
-          {isFormOpen ? "收合新增社費紀錄" : "➕ 新增社費紀錄"}
+          {isFormOpen ? "收合新增社費紀錄" : "新增社費紀錄"}
         </button>
 
         {isFormOpen ? (
-        <form
-          onSubmit={handleSubmit}
-          className="space-y-4 rounded-3xl bg-white/85 p-5 shadow-[8px_8px_20px_rgba(0,0,0,0.12),-8px_-8px_20px_rgba(255,255,255,0.9)]"
-        >
-          <div className="flex items-center justify-between gap-3">
-            <h2 className="text-xl font-bold">
-              {editingId ? "編輯社費紀錄" : "新增社費紀錄"}
-            </h2>
-            {editingId ? (
-              <button
-                type="button"
-                onClick={resetForm}
-                className={`rounded-2xl bg-white px-4 py-2 text-sm font-bold ${buttonShadow}`}
+          <form
+            onSubmit={handleSubmit}
+            className="space-y-4 rounded-3xl bg-white/85 p-5 shadow-[8px_8px_20px_rgba(0,0,0,0.12),-8px_-8px_20px_rgba(255,255,255,0.9)]"
+          >
+            <div className="flex items-center justify-between gap-3">
+              <h2 className="text-xl font-bold">
+                {editingId ? "編輯社費紀錄" : "新增社費紀錄"}
+              </h2>
+              {editingId ? (
+                <button
+                  type="button"
+                  onClick={resetForm}
+                  className={`rounded-2xl bg-white px-4 py-2 text-sm font-bold ${buttonShadow}`}
+                >
+                  取消
+                </button>
+              ) : null}
+            </div>
+
+            <label className="block">
+              <span className="text-sm font-bold">選擇社友</span>
+              <select
+                required
+                value={form.memberId}
+                onChange={(event) =>
+                  setForm((currentForm) => ({
+                    ...currentForm,
+                    memberId: event.target.value,
+                  }))
+                }
+                className="mt-2 w-full rounded-2xl border border-[#E5D9BD] bg-white px-4 py-3 outline-none focus:border-[#173B73] focus:ring-2 focus:ring-[#F7C948]"
               >
-                取消
-              </button>
-            ) : null}
-          </div>
+                <option value="">請選擇社友</option>
+                {sortedMembers.map((member) => (
+                  <option key={member.id} value={member.id}>
+                    {formatMemberName(member)}
+                  </option>
+                ))}
+              </select>
+            </label>
 
-          <label className="block">
-            <span className="text-sm font-bold">選擇社員</span>
-            <select
-              required
-              value={form.memberId}
-              onChange={(event) =>
-                setForm((currentForm) => ({
-                  ...currentForm,
-                  memberId: event.target.value,
-                }))
-              }
-              className="mt-2 w-full rounded-2xl border border-[#E5D9BD] bg-white px-4 py-3 outline-none focus:border-[#173B73] focus:ring-2 focus:ring-[#F7C948]"
-            >
-              <option value="">請選擇社員</option>
-              {sortedMembers.map((member) => (
-                <option key={member.id} value={member.id}>
-                  {formatMemberName(member)}
-                </option>
-              ))}
-            </select>
-          </label>
-
-          <label className="block">
-            <span className="text-sm font-bold">月份</span>
-            <input
-              required
-              type="month"
-              value={form.periodMonth}
-              onChange={(event) =>
-                setForm((currentForm) => ({
-                  ...currentForm,
-                  periodMonth: event.target.value,
-                }))
-              }
-              className="mt-2 w-full rounded-2xl border border-[#E5D9BD] bg-white px-4 py-3 outline-none focus:border-[#173B73] focus:ring-2 focus:ring-[#F7C948]"
-            />
-          </label>
-
-          {(
-            [
-              ["previousBalance", "前期餘額"],
-              ["paidAmount", "已繳金額"],
-            ] as [NumericDuesField, string][]
-          ).map(([field, label]) => (
-            <label key={field} className="block">
-              <span className="text-sm font-bold">{label}</span>
+            <label className="block">
+              <span className="text-sm font-bold">計費月份</span>
               <input
-                type="number"
-                value={form[field]}
-                onChange={(event) => updateNumericField(field, event.target.value)}
+                required
+                type="month"
+                value={form.periodMonth}
+                onChange={(event) =>
+                  setForm((currentForm) => ({
+                    ...currentForm,
+                    periodMonth: event.target.value,
+                  }))
+                }
                 className="mt-2 w-full rounded-2xl border border-[#E5D9BD] bg-white px-4 py-3 outline-none focus:border-[#173B73] focus:ring-2 focus:ring-[#F7C948]"
               />
             </label>
-          ))}
 
-          <section className="rounded-2xl bg-[#F8F3E8] p-4">
-            <button
-              type="button"
-              onClick={() => setIsLineItemsOpen((currentValue) => !currentValue)}
-              className="w-full text-left font-bold"
-            >
-              {isLineItemsOpen ? "▼ 收合明細" : "▶ 展開明細"}｜本期社費：
-              {formatCurrency(currentDue)}
-            </button>
+            {(
+              [
+                ["previousBalance", "前期未繳"],
+                ["paidAmount", "已繳費用"],
+              ] as [NumericDuesField, string][]
+            ).map(([field, label]) => (
+              <label key={field} className="block">
+                <span className="text-sm font-bold">{label}</span>
+                <input
+                  type="number"
+                  value={form[field]}
+                  onChange={(event) => updateNumericField(field, event.target.value)}
+                  className="mt-2 w-full rounded-2xl border border-[#E5D9BD] bg-white px-4 py-3 outline-none focus:border-[#173B73] focus:ring-2 focus:ring-[#F7C948]"
+                />
+              </label>
+            ))}
 
-            {isLineItemsOpen ? (
-              <DuesLineItemsEditor
-                items={form.lineItems}
-                onChange={(lineItems) =>
-                  setForm((currentForm) => ({ ...currentForm, lineItems }))
+            <section className="rounded-2xl bg-[#F8F3E8] p-4">
+              <button
+                type="button"
+                onClick={() => setIsLineItemsOpen((currentValue) => !currentValue)}
+                className="w-full text-left font-bold"
+              >
+                {isLineItemsOpen ? "收合本期社費明細" : "展開本期社費明細"}：
+                {formatCurrency(currentDue)}
+              </button>
+
+              {isLineItemsOpen ? (
+                <DuesLineItemsEditor
+                  items={form.lineItems}
+                  onChange={(lineItems) =>
+                    setForm((currentForm) => ({ ...currentForm, lineItems }))
+                  }
+                />
+              ) : null}
+            </section>
+
+            <div className="rounded-2xl bg-[#F8F3E8] p-4 font-bold">
+              尚欠金額：{formatCurrency(currentBalance)}
+            </div>
+
+            <label className="block">
+              <span className="text-sm font-bold">繳費日期</span>
+              <input
+                type="date"
+                value={form.paymentDate}
+                onChange={(event) =>
+                  setForm((currentForm) => ({
+                    ...currentForm,
+                    paymentDate: event.target.value,
+                  }))
                 }
+                className="mt-2 w-full rounded-2xl border border-[#E5D9BD] bg-white px-4 py-3 outline-none focus:border-[#173B73] focus:ring-2 focus:ring-[#F7C948]"
               />
-            ) : null}
-          </section>
+            </label>
 
-          <div className="rounded-2xl bg-[#F8F3E8] p-4 font-bold">
-            尚欠金額：{formatCurrency(currentBalance)}
-          </div>
+            <label className="block">
+              <span className="text-sm font-bold">繳費方式</span>
+              <select
+                value={form.paymentMethod}
+                onChange={(event) =>
+                  setForm((currentForm) => ({
+                    ...currentForm,
+                    paymentMethod: event.target.value as PaymentMethod,
+                  }))
+                }
+                className="mt-2 w-full rounded-2xl border border-[#E5D9BD] bg-white px-4 py-3 outline-none focus:border-[#173B73] focus:ring-2 focus:ring-[#F7C948]"
+              >
+                {paymentMethods.map((method) => (
+                  <option key={method} value={method}>
+                    {method}
+                  </option>
+                ))}
+              </select>
+            </label>
 
-          <label className="block">
-            <span className="text-sm font-bold">付款日期</span>
-            <input
-              type="date"
-              value={form.paymentDate}
-              onChange={(event) =>
-                setForm((currentForm) => ({
-                  ...currentForm,
-                  paymentDate: event.target.value,
-                }))
-              }
-              className="mt-2 w-full rounded-2xl border border-[#E5D9BD] bg-white px-4 py-3 outline-none focus:border-[#173B73] focus:ring-2 focus:ring-[#F7C948]"
-            />
-          </label>
+            <label className="block">
+              <span className="text-sm font-bold">備註</span>
+              <textarea
+                rows={4}
+                value={form.note}
+                onChange={(event) =>
+                  setForm((currentForm) => ({
+                    ...currentForm,
+                    note: event.target.value,
+                  }))
+                }
+                className="mt-2 w-full resize-none rounded-2xl border border-[#E5D9BD] bg-white px-4 py-3 outline-none focus:border-[#173B73] focus:ring-2 focus:ring-[#F7C948]"
+              />
+            </label>
 
-          <label className="block">
-            <span className="text-sm font-bold">付款方式</span>
-            <select
-              value={form.paymentMethod}
-              onChange={(event) =>
-                setForm((currentForm) => ({
-                  ...currentForm,
-                  paymentMethod: event.target.value as PaymentMethod,
-                }))
-              }
-              className="mt-2 w-full rounded-2xl border border-[#E5D9BD] bg-white px-4 py-3 outline-none focus:border-[#173B73] focus:ring-2 focus:ring-[#F7C948]"
+            <button
+              type="submit"
+              className={`w-full rounded-2xl bg-[#F7C948] py-4 font-bold ${buttonShadow}`}
             >
-              {paymentMethods.map((method) => (
-                <option key={method} value={method}>
-                  {method}
-                </option>
-              ))}
-            </select>
-          </label>
-
-          <label className="block">
-            <span className="text-sm font-bold">備註</span>
-            <textarea
-              rows={4}
-              value={form.note}
-              onChange={(event) =>
-                setForm((currentForm) => ({
-                  ...currentForm,
-                  note: event.target.value,
-                }))
-              }
-              className="mt-2 w-full resize-none rounded-2xl border border-[#E5D9BD] bg-white px-4 py-3 outline-none focus:border-[#173B73] focus:ring-2 focus:ring-[#F7C948]"
-            />
-          </label>
-
-          <button
-            type="submit"
-            className={`w-full rounded-2xl bg-[#F7C948] py-4 font-bold ${buttonShadow}`}
-          >
-            {editingId ? "儲存修改" : "新增紀錄"}
-          </button>
-        </form>
+              {editingId ? "儲存修改" : "新增紀錄"}
+            </button>
+          </form>
         ) : null}
-
         <section className="grid grid-cols-1 gap-3">
           <div className="rounded-3xl bg-white/85 p-5 shadow-[8px_8px_20px_rgba(0,0,0,0.12),-8px_-8px_20px_rgba(255,255,255,0.9)]">
             <p className="text-sm font-bold text-[#C99700]">未繳總額</p>
@@ -439,81 +507,225 @@ export default function DuesPage() {
               目前沒有社費紀錄
             </div>
           ) : (
-            filteredRecords.map((record) => (
-              <article
-                key={record.id}
-                className="rounded-3xl bg-white/85 p-5 shadow-[8px_8px_20px_rgba(0,0,0,0.12),-8px_-8px_20px_rgba(255,255,255,0.9)]"
-              >
-                <div className="flex items-start justify-between gap-3">
-                  <div>
-                    <p className="text-sm font-bold text-[#C99700]">
-                      {record.periodMonth || "未填月份"}
-                    </p>
-                    <h3 className="mt-1 text-xl font-bold">
-                      {getMemberName(record.memberId, sortedMembers)}
-                    </h3>
-                    <p className="mt-1 text-sm font-semibold">
-                      結餘：{formatCurrency(calculateDuesBalance(record))}
-                    </p>
-                  </div>
-                  <span className="rounded-full bg-[#173B73] px-3 py-1 text-xs font-bold text-white">
-                    {record.paymentMethod}
-                  </span>
-                </div>
+            filteredRecords.map((record) => {
+              const isExpanded = expandedRecordId === record.id;
+              const isPreviewOpen = previewRecordId === record.id;
+              const member = sortedMembers.find((memberItem) => memberItem.id === record.memberId);
+              const memberName = member
+                ? formatMemberName(member)
+                : getMemberName(record.memberId, sortedMembers);
+              const status = getDuesPaymentStatus(record);
 
-                <div className="mt-4 space-y-2 text-sm font-semibold text-[#173B73]/80">
-                  <p>前期餘額：{formatCurrency(record.previousBalance)}</p>
-                  <p>前期未繳：{formatCurrency(record.previousBalance)}</p>
-                  <p>本期社費：{formatCurrency(record.currentDue)}</p>
-                  <p>已繳金額：{formatCurrency(record.paidAmount)}</p>
-                  <p>尚欠金額：{formatCurrency(calculateDuesBalance(record))}</p>
-                  <p>繳費方式：{record.paymentMethod}</p>
-                  <p>付款日期：{record.paymentDate || "-"}</p>
-                  <details>
-                    <summary className="cursor-pointer font-bold">
-                      明細：本期社費 {formatCurrency(record.currentDue)}
-                    </summary>
-                    <div className="mt-2 space-y-1">
-                      {record.lineItems.map((item) => (
-                        <p key={item.id}>
-                          {formatLineItemType(item.itemType)} {item.serviceDate}
-                          {item.itemName ? ` ${item.itemName}` : ""}：
-                          {formatCurrency(item.amount)}
+              return (
+                <article
+                  key={record.id}
+                  className="min-w-0 rounded-3xl bg-white/85 p-5 shadow-[8px_8px_20px_rgba(0,0,0,0.12),-8px_-8px_20px_rgba(255,255,255,0.9)]"
+                >
+                  <button
+                    type="button"
+                    onClick={() =>
+                      setExpandedRecordId((currentId) =>
+                        currentId === record.id ? "" : record.id
+                      )
+                    }
+                    className="w-full text-left"
+                  >
+                    <div className="flex min-w-0 items-start justify-between gap-3">
+                      <div className="min-w-0">
+                        <p className="text-sm font-bold text-[#C99700]">
+                          {record.periodMonth || "未填月份"}
                         </p>
-                      ))}
+                        <h3 className="mt-1 break-words text-xl font-bold">
+                          {memberName}
+                        </h3>
+                        <p className="mt-1 text-sm font-semibold">
+                          尚欠金額：{formatCurrency(getDisplayDuesBalance(record))}
+                        </p>
+                      </div>
+                      <span
+                        className={`shrink-0 whitespace-nowrap rounded-full px-3 py-1 text-xs font-bold text-white ${
+                          status === "未匯款" ? "bg-[#F47C6C]" : "bg-[#173B73]"
+                        }`}
+                      >
+                        {status}
+                      </span>
                     </div>
-                  </details>
-                  {record.note ? <p>備註：{record.note}</p> : null}
-                </div>
+                  </button>
 
-                <div className="mt-5 grid grid-cols-2 gap-3">
-                  <button
-                    type="button"
-                    onClick={() => handleEdit(record)}
-                    className={`rounded-2xl bg-[#F7C948] py-3 font-bold ${buttonShadow}`}
-                  >
-                    編輯
-                  </button>
-                  <button
-                    type="button"
-                    onClick={() => handleDelete(record.id)}
-                    className={`rounded-2xl bg-white py-3 font-bold ${buttonShadow}`}
-                  >
-                    刪除
-                  </button>
-                </div>
-              </article>
-            ))
+                  {isExpanded ? (
+                    <div className="mt-4 space-y-4 border-t border-[#E5D9BD] pt-4 text-sm font-semibold text-[#173B73]/80">
+                      <div className="space-y-2">
+                        <p>前期未繳：{formatCurrency(record.previousBalance)}</p>
+                        <p>本期社費：{formatCurrency(record.currentDue)}</p>
+                        <p>已繳費用：{formatCurrency(record.paidAmount)}</p>
+                        <p>尚欠金額：{formatCurrency(getDisplayDuesBalance(record))}</p>
+                        <p>繳費方式：{record.paymentMethod}</p>
+                        <p>繳費日期：{record.paymentDate || "-"}</p>
+                        <details>
+                          <summary className="cursor-pointer font-bold">
+                            本期社費明細：{formatCurrency(record.currentDue)}
+                          </summary>
+                          <div className="mt-2 space-y-1">
+                            {getStatementLineItems(record).map((item) => (
+                              <p key={item.id}>
+                                {item.label}
+                                {item.description ? ` ${item.description}` : ""}：
+                                {formatCurrency(item.amount)}
+                              </p>
+                            ))}
+                          </div>
+                        </details>
+                        {record.note ? <p>備註：{record.note}</p> : null}
+                      </div>
+
+                      <div className="grid grid-cols-2 gap-3">
+                        <button
+                          type="button"
+                          onClick={() =>
+                            setPreviewRecordId((currentId) =>
+                              currentId === record.id ? "" : record.id
+                            )
+                          }
+                          className={`rounded-2xl bg-white py-3 font-bold ${buttonShadow}`}
+                        >
+                          預覽通知單
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => void exportStatementPdf(record)}
+                          disabled={exportingId === record.id}
+                          className={`rounded-2xl bg-[#F7C948] py-3 font-bold disabled:opacity-60 ${buttonShadow}`}
+                        >
+                          📄 匯出 PDF
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => void exportStatementJpg(record)}
+                          disabled={exportingId === record.id}
+                          className={`rounded-2xl bg-white py-3 font-bold disabled:opacity-60 ${buttonShadow}`}
+                        >
+                          🖼️ 匯出 JPG
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => handleEdit(record)}
+                          className={`rounded-2xl bg-white py-3 font-bold ${buttonShadow}`}
+                        >
+                          編輯
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => handleDelete(record.id)}
+                          className={`rounded-2xl bg-white py-3 font-bold ${buttonShadow}`}
+                        >
+                          刪除
+                        </button>
+                      </div>
+
+                      <div
+                        className={
+                          isPreviewOpen
+                            ? "overflow-x-auto rounded-2xl border border-[#E5D9BD] bg-[#F8F3E8] p-3"
+                            : "fixed -left-[10000px] top-0"
+                        }
+                      >
+                        <DuesStatement record={record} memberName={memberName} />
+                      </div>
+                    </div>
+                  ) : null}
+                </article>
+              );
+            })
           )}
         </section>
       </section>
     </main>
   );
 }
+function DuesStatement({
+  record,
+  memberName,
+}: {
+  record: DuesRecord;
+  memberName: string;
+}) {
+  const lineItems = getStatementLineItems(record);
+
+  return (
+    <section
+      id={`dues-statement-${record.id}`}
+      className="box-border min-h-[297mm] w-[210mm] bg-white p-[18mm] text-black"
+      style={{
+        fontFamily: '"Noto Sans TC", "Microsoft JhengHei", Arial, sans-serif',
+      }}
+    >
+      <div className="border-b-2 border-black pb-5 text-center">
+        <p className="text-[20pt] font-bold">高雄晨光扶輪社</p>
+        <h2 className="mt-2 text-[26pt] font-bold">社費繳費通知</h2>
+        <p className="mt-2 text-[15pt]">{formatStatementMonth(record.periodMonth)}社費繳費通知</p>
+      </div>
+
+      <div className="mt-8 grid grid-cols-2 gap-x-8 gap-y-3 text-[13pt]">
+        <StatementField label="社友姓名／社名" value={memberName || "未指定社友"} />
+        <StatementField label="計費月份" value={formatStatementMonth(record.periodMonth)} />
+        <StatementField label="前期未繳" value={formatCurrency(record.previousBalance)} />
+        <StatementField label="本期社費總計" value={formatCurrency(record.currentDue)} />
+        <StatementField label="已繳費用" value={formatCurrency(record.paidAmount)} />
+        <StatementField label="尚欠金額" value={formatCurrency(getDisplayDuesBalance(record))} />
+        <StatementField label="繳費方式" value={record.paymentMethod || "-"} />
+        <StatementField label="繳費日期" value={record.paymentDate || "-"} />
+      </div>
+
+      <div className="mt-8">
+        <h3 className="mb-3 text-[16pt] font-bold">本期社費明細</h3>
+        <table className="w-full border-collapse text-[12pt]">
+          <thead>
+            <tr>
+              <th className="border border-black px-3 py-2 text-left">項目</th>
+              <th className="border border-black px-3 py-2 text-left">說明</th>
+              <th className="border border-black px-3 py-2 text-right">金額</th>
+            </tr>
+          </thead>
+          <tbody>
+            {lineItems.map((item) => (
+              <tr key={item.id}>
+                <td className="border border-black px-3 py-2">{item.label}</td>
+                <td className="border border-black px-3 py-2">{item.description || "-"}</td>
+                <td className="border border-black px-3 py-2 text-right">
+                  {formatCurrency(item.amount)}
+                </td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      </div>
+
+      <div className="mt-8 text-[13pt]">
+        <p className="font-bold">備註</p>
+        <p className="mt-2 min-h-16 whitespace-pre-wrap border border-black p-3">
+          {record.note || "-"}
+        </p>
+      </div>
+
+      <div className="mt-8 text-right text-[11pt]">
+        產出日期：{formatTaiwanDate(new Date())}
+      </div>
+    </section>
+  );
+}
+
+function StatementField({ label, value }: { label: string; value: string }) {
+  return (
+    <div>
+      <p className="text-[10pt] text-black/65">{label}</p>
+      <p className="mt-1 border-b border-black pb-1 font-bold">{value}</p>
+    </div>
+  );
+}
 
 function getMemberName(memberId: string, members: Member[]) {
   const member = members.find((memberItem) => memberItem.id === memberId);
-  return member ? formatMemberName(member) || "未知社員" : "未知社員";
+  return member ? formatMemberName(member) || "未知社友" : "未知社友";
 }
 
 function DuesLineItemsEditor({
@@ -558,141 +770,90 @@ function DuesLineItemsEditor({
   return (
     <div className="mt-4 space-y-4">
       <div className="grid grid-cols-2 gap-2">
-        <SmallAction onClick={() => addItem({ itemType: "meal", itemName: "餐費" })}>
-          餐費
-        </SmallAction>
-        <SmallAction
-          onClick={() =>
-            addItem({
-              itemType: "annual_fee",
-              itemName: "常年費",
-              unitAmount: 1000,
-              amount: 1000,
-            })
-          }
-        >
-          常年費
-        </SmallAction>
-        <SmallAction
-          onClick={() =>
-            addItem({ itemType: "special_donation", itemName: "特別捐" })
-          }
-        >
-          特別捐
-        </SmallAction>
-        <SmallAction onClick={() => addItem({ itemType: "red_box", itemName: "紅箱" })}>
-          紅箱
-        </SmallAction>
-        <SmallAction
-          onClick={() =>
-            addItem({
-              itemType: "rotary_foundation",
-              itemName: "扶輪基金（代收）",
-              unitAmount: 270,
-              amount: 270,
-            })
-          }
-        >
-          扶輪基金
-        </SmallAction>
-        <SmallAction
-          onClick={() => addItem({ itemType: "pass_through", itemName: "代收付" })}
-        >
-          代收付
-        </SmallAction>
+        <SmallAction onClick={() => addItem({ itemType: "meal", itemName: "餐費" })}>餐費</SmallAction>
+        <SmallAction onClick={() => addItem({ itemType: "annual_fee", itemName: "常年費", unitAmount: 1000, amount: 1000 })}>常年費</SmallAction>
+        <SmallAction onClick={() => addItem({ itemType: "special_donation", itemName: "特別捐" })}>特別捐</SmallAction>
+        <SmallAction onClick={() => addItem({ itemType: "red_box", itemName: "紅箱" })}>紅箱</SmallAction>
+        <SmallAction onClick={() => addItem({ itemType: "rotary_foundation", itemName: "扶輪基金（代收）", unitAmount: 270, amount: 270 })}>扶輪基金</SmallAction>
+        <SmallAction onClick={() => addItem({ itemType: "pass_through", itemName: "代收付" })}>代收付</SmallAction>
       </div>
 
       {items.length === 0 ? (
         <p className="text-sm font-semibold text-[#173B73]/70">
-          尚未新增明細。舊資料會以「舊資料總額」顯示。
+          尚未新增明細；若為舊資料，通知單會顯示舊資料總額。
         </p>
       ) : (
         items.map((item) => (
           <div key={item.id} className="space-y-2 rounded-2xl bg-white p-3">
             <div className="flex items-center justify-between gap-2">
               <p className="font-bold">{formatLineItemType(item.itemType)}</p>
-              <button
-                type="button"
-                onClick={() => onChange(items.filter((lineItem) => lineItem.id !== item.id))}
-                className="text-sm font-bold text-red-600"
-              >
-                刪除
-              </button>
+              <button type="button" onClick={() => onChange(items.filter((lineItem) => lineItem.id !== item.id))} className="text-sm font-bold text-red-600">刪除</button>
             </div>
             {item.itemType === "annual_fee" ? (
-              <select
-                value={item.amount}
-                onChange={(event) =>
-                  updateItem(item.id, {
-                    unitAmount: Number(event.target.value),
-                    amount: Number(event.target.value),
-                  })
-                }
-                className="w-full rounded-2xl border border-[#E5D9BD] px-3 py-2"
-              >
+              <select value={item.amount} onChange={(event) => updateItem(item.id, { unitAmount: Number(event.target.value), amount: Number(event.target.value) })} className="w-full rounded-2xl border border-[#E5D9BD] px-3 py-2">
                 <option value={1000}>NT$1,000</option>
                 <option value={2000}>NT$2,000</option>
               </select>
             ) : (
               <>
-                {(item.itemType === "meal" || item.itemType === "red_box") ? (
-                  <input
-                    type="date"
-                    value={item.serviceDate}
-                    onChange={(event) =>
-                      updateItem(item.id, { serviceDate: event.target.value })
-                    }
-                    className="w-full rounded-2xl border border-[#E5D9BD] px-3 py-2"
-                  />
+                {item.itemType === "meal" || item.itemType === "red_box" ? (
+                  <input type="date" value={item.serviceDate} onChange={(event) => updateItem(item.id, { serviceDate: event.target.value })} className="w-full rounded-2xl border border-[#E5D9BD] px-3 py-2" />
                 ) : null}
-                {(item.itemType === "pass_through" || item.itemType === "special_donation") ? (
-                  <input
-                    value={item.itemName}
-                    onChange={(event) => updateItem(item.id, { itemName: event.target.value })}
-                    placeholder="項目名稱 / 說明"
-                    className="w-full rounded-2xl border border-[#E5D9BD] px-3 py-2"
-                  />
+                {item.itemType === "pass_through" || item.itemType === "special_donation" ? (
+                  <input value={item.itemName} onChange={(event) => updateItem(item.id, { itemName: event.target.value })} placeholder="項目名稱 / 說明" className="w-full rounded-2xl border border-[#E5D9BD] px-3 py-2" />
                 ) : null}
-                <input
-                  type="number"
-                  value={item.amount}
-                  onChange={(event) =>
-                    updateItem(item.id, {
-                      unitAmount: Number(event.target.value) || 0,
-                      amount: Number(event.target.value) || 0,
-                    })
-                  }
-                  className="w-full rounded-2xl border border-[#E5D9BD] px-3 py-2"
-                />
+                <input type="number" value={item.amount} onChange={(event) => updateItem(item.id, { unitAmount: Number(event.target.value) || 0, amount: Number(event.target.value) || 0 })} className="w-full rounded-2xl border border-[#E5D9BD] px-3 py-2" />
               </>
             )}
-            <textarea
-              value={item.note}
-              onChange={(event) => updateItem(item.id, { note: event.target.value })}
-              placeholder="備註"
-              className="w-full resize-none rounded-2xl border border-[#E5D9BD] px-3 py-2"
-            />
+            <textarea value={item.note} onChange={(event) => updateItem(item.id, { note: event.target.value })} placeholder="備註" className="w-full resize-none rounded-2xl border border-[#E5D9BD] px-3 py-2" />
           </div>
         ))
       )}
     </div>
   );
 }
-
 function SmallAction({ children, onClick }: { children: string; onClick: () => void }) {
   return (
-    <button
-      type="button"
-      onClick={onClick}
-      className={`rounded-2xl bg-white px-3 py-2 text-sm font-bold ${buttonShadow}`}
-    >
+    <button type="button" onClick={onClick} className={`rounded-2xl bg-white px-3 py-2 text-sm font-bold ${buttonShadow}`}>
       {children}
     </button>
   );
 }
 
-function calculateLineItemsTotal(items: DuesLineItem[]) {
-  return items.reduce((total, item) => total + item.amount, 0);
+function getCurrentDue(record: Pick<DuesRecord, "currentDue" | "lineItems">) {
+  if (record.lineItems.length === 0) return record.currentDue;
+  return record.lineItems.reduce((total, item) => total + item.amount, 0);
+}
+
+function getStatementLineItems(record: DuesRecord) {
+  if (record.lineItems.length === 0) {
+    return [{ id: `${record.id}-legacy`, label: "舊資料總額", description: "", amount: record.currentDue }];
+  }
+
+  return record.lineItems.map((item) => {
+    if (item.itemType === "rotary_foundation") {
+      return { id: item.id, label: "扶輪基金（代收）", description: "固定 NT$270", amount: 270 };
+    }
+
+    return {
+      id: item.id,
+      label: formatLineItemType(item.itemType),
+      description: formatLineItemDescription(item),
+      amount: item.amount,
+    };
+  });
+}
+
+function formatLineItemDescription(item: DuesLineItem) {
+  if (item.itemType === "meal" || item.itemType === "red_box") {
+    return item.serviceDate ? `參加日期 ${item.serviceDate}` : "";
+  }
+
+  if (item.itemType === "special_donation" || item.itemType === "pass_through") {
+    return [item.itemName, item.note].filter(Boolean).join(" / ");
+  }
+
+  return item.note || item.itemName || "";
 }
 
 function formatLineItemType(type: DuesLineItem["itemType"]) {
@@ -708,12 +869,64 @@ function formatLineItemType(type: DuesLineItem["itemType"]) {
   return labels[type];
 }
 
+function buildStatementFilename(record: DuesRecord, members: Member[], extension: "pdf" | "jpg") {
+  const memberName = sanitizeFilename(getMemberName(record.memberId, members)).replaceAll("_", "");
+  const periodMonth = sanitizeFilename(record.periodMonth || "未填月份");
+  return `高雄晨光扶輪社_社費通知_${memberName}_${periodMonth}.${extension}`;
+}
+
+function downloadBlob(blob: Blob, filename: string) {
+  const url = URL.createObjectURL(blob);
+  const link = document.createElement("a");
+  link.href = url;
+  link.download = filename;
+  document.body.appendChild(link);
+  link.click();
+  link.remove();
+  URL.revokeObjectURL(url);
+}
+
+function createExportElement(source: HTMLElement) {
+  const clone = source.cloneNode(true) as HTMLElement;
+  clone.removeAttribute("id");
+  clone.style.position = "fixed";
+  clone.style.left = "0";
+  clone.style.top = "0";
+  clone.style.zIndex = "-1";
+  clone.style.width = "210mm";
+  clone.style.minHeight = "297mm";
+  clone.style.backgroundColor = "#ffffff";
+  clone.style.color = "#000000";
+
+  const elements = [clone, ...Array.from(clone.querySelectorAll<HTMLElement>("*"))];
+  elements.forEach((element) => {
+    element.style.color = "#000000";
+    element.style.borderColor = "#000000";
+    if (element.tagName === "SECTION" || element.tagName === "TABLE") {
+      element.style.backgroundColor = "#ffffff";
+    }
+  });
+
+  document.body.appendChild(clone);
+  return clone;
+}
+
+function sanitizeFilename(value: string) {
+  return value.trim().replace(/[\\/:*?"<>|\s]+/g, "_").replace(/^_+|_+$/g, "");
+}
+
+function formatStatementMonth(periodMonth: string) {
+  if (!periodMonth) return "未填月份";
+  const [year, month] = periodMonth.split("-");
+  return `${year} 年 ${Number(month)} 月`;
+}
+
+function formatTaiwanDate(date: Date) {
+  return `${date.getFullYear()}/${String(date.getMonth() + 1).padStart(2, "0")}/${String(date.getDate()).padStart(2, "0")}`;
+}
+
 function formatCurrency(value: number) {
-  return new Intl.NumberFormat("zh-TW", {
-    style: "currency",
-    currency: "TWD",
-    maximumFractionDigits: 0,
-  }).format(value);
+  return new Intl.NumberFormat("zh-TW", { style: "currency", currency: "TWD", maximumFractionDigits: 0 }).format(value);
 }
 
 function escapeCsvValue(value: string) {

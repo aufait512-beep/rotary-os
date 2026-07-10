@@ -86,6 +86,18 @@ export function calculateDuesBalance(record: DuesRecord) {
   );
 }
 
+export function getOutstandingBalance(record: DuesRecord) {
+  return calculateDuesBalance(record);
+}
+
+export function getDisplayDuesBalance(record: DuesRecord) {
+  return Math.max(0, getOutstandingBalance(record));
+}
+
+export function getDuesPaymentStatus(record: DuesRecord) {
+  return getOutstandingBalance(record) > 0 ? "未匯款" : "已繳清";
+}
+
 export function sortDuesRecords(records: DuesRecord[]) {
   return [...records].sort((firstRecord, secondRecord) =>
     secondRecord.periodMonth.localeCompare(firstRecord.periodMonth)
