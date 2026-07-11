@@ -20,6 +20,23 @@ type AccountingCategory = {
   isActive: boolean;
 };
 
+type CategoryFormState = {
+  id: string;
+  rotaryYearId: string;
+  entryType: EntryType;
+  groupName: string;
+  name: string;
+  annualBudget: number;
+  sortOrder: number;
+  isActive: boolean;
+};
+
+type BudgetImportRow = CategoryFormState & {
+  previewId: string;
+  status: string;
+  error: string;
+};
+
 type AccountingEntry = {
   id: string;
   rotaryYearId: string;
@@ -238,19 +255,65 @@ export default function AccountingPage() {
   }
 
   async function updateBudget(category: AccountingCategory, annualBudget: number) {
+    await saveCategory({ ...category, annualBudget });
+  }
+
+  async function saveCategory(category: CategoryFormState) {
+    setErrorMessage("");
+    if (!category.rotaryYearId || !category.groupName.trim() || !category.name.trim()) {
+      setErrorMessage("請完整填寫年度、預算大項與子科目名稱。");
+      return null;
+    }
+    if (category.annualBudget < 0 || !Number.isInteger(category.annualBudget)) {
+      setErrorMessage("年度預算只能是 0 以上整數。");
+      return null;
+    }
+    const duplicated = categories.find(
+      (item) =>
+        item.id !== category.id &&
+        item.rotaryYearId === category.rotaryYearId &&
+        item.entryType === category.entryType &&
+        item.groupName.trim() === category.groupName.trim() &&
+        item.name.trim() === category.name.trim()
+    );
+    if (duplicated) {
+      setErrorMessage("同年度、同類型、同大項與同子科目不可重複。");
+      return null;
+    }
+
     const { data, error } = await supabase
       .from("accounting_categories")
-      .upsert({ ...toCategoryRow(category), annual_budget: annualBudget }, { onConflict: "id" })
+      .upsert(toCategoryRow({ ...category, id: category.id || crypto.randomUUID() }), { onConflict: "id" })
       .select()
       .single();
     if (error) {
-      setErrorMessage(`年度預算更新失敗：${error.message}`);
-      return;
+      setErrorMessage(`年度預算科目儲存失敗：${error.message}`);
+      return null;
     }
     const savedCategory = mapCategory(data);
     setCategories((currentCategories) =>
-      currentCategories.map((item) => (item.id === savedCategory.id ? savedCategory : item))
+      currentCategories.some((item) => item.id === savedCategory.id)
+        ? currentCategories.map((item) => (item.id === savedCategory.id ? savedCategory : item))
+        : [...currentCategories, savedCategory]
     );
+    setMessage("年度預算科目已儲存。");
+    return savedCategory;
+  }
+
+  async function deleteCategory(category: AccountingCategory) {
+    const hasEntries = entries.some((entry) => sameCategory(entry, category));
+    if (hasEntries) {
+      setErrorMessage("此科目已有交易紀錄，不可刪除；請改用停用。");
+      return;
+    }
+    if (!window.confirm(`確定刪除「${category.groupName} / ${category.name}」？`)) return;
+    if (!window.confirm("再次確認：刪除後此科目不會出現在年度預算表。")) return;
+    const { error } = await supabase.from("accounting_categories").delete().eq("id", category.id);
+    if (error) {
+      setErrorMessage(`科目刪除失敗：${error.message}`);
+      return;
+    }
+    setCategories((currentCategories) => currentCategories.filter((item) => item.id !== category.id));
   }
 
   async function closeMonth() {
@@ -466,7 +529,20 @@ export default function AccountingPage() {
         ) : null}
 
         {tab === "年度預算" ? (
-          <BudgetTab categories={yearCategories} entries={yearToDateEntries} onUpdateBudget={updateBudget} />
+          <BudgetTab
+            years={years}
+            yearId={yearId}
+            categories={yearCategories}
+            allCategories={categories}
+            entries={yearToDateEntries}
+            onYearChange={(nextYearId) => {
+              setYearId(nextYearId);
+              setForm((currentForm) => ({ ...currentForm, rotaryYearId: nextYearId }));
+            }}
+            onSaveCategory={saveCategory}
+            onDeleteCategory={deleteCategory}
+            onUpdateBudget={updateBudget}
+          />
         ) : null}
         {tab === "資產負債表" ? (
           <BalanceSheetOnly items={report.balanceItems} yearBalance={report.yearBalance} />
@@ -800,29 +876,307 @@ function PassThroughSection({ entries }: { entries: AccountingEntry[] }) {
   );
 }
 
-function BudgetTab({ categories, entries, onUpdateBudget }: { categories: AccountingCategory[]; entries: AccountingEntry[]; onUpdateBudget: (category: AccountingCategory, budget: number) => void }) {
+function BudgetTab({
+  years,
+  yearId,
+  categories,
+  allCategories,
+  entries,
+  onYearChange,
+  onSaveCategory,
+  onDeleteCategory,
+  onUpdateBudget,
+}: {
+  years: RotaryYear[];
+  yearId: string;
+  categories: AccountingCategory[];
+  allCategories: AccountingCategory[];
+  entries: AccountingEntry[];
+  onYearChange: (yearId: string) => void;
+  onSaveCategory: (category: CategoryFormState) => Promise<AccountingCategory | null>;
+  onDeleteCategory: (category: AccountingCategory) => void;
+  onUpdateBudget: (category: AccountingCategory, budget: number) => void;
+}) {
+  const [isFormOpen, setIsFormOpen] = useState(false);
+  const [editingCategoryId, setEditingCategoryId] = useState("");
+  const [categoryForm, setCategoryForm] = useState<CategoryFormState>({
+    id: "",
+    rotaryYearId: yearId,
+    entryType: "income",
+    groupName: "",
+    name: "",
+    annualBudget: 0,
+    sortOrder: 1000,
+    isActive: true,
+  });
+  const [importRows, setImportRows] = useState<BudgetImportRow[]>([]);
+  const [importMessage, setImportMessage] = useState("");
+  const incomeBudget = categories
+    .filter((category) => category.entryType === "income")
+    .reduce((total, category) => total + category.annualBudget, 0);
+  const expenseBudget = categories
+    .filter((category) => category.entryType === "expense")
+    .reduce((total, category) => total + category.annualBudget, 0);
+  const budgetDifference = incomeBudget - expenseBudget;
+  const sortedCategories = [...categories].sort((first, second) => {
+    if (first.entryType !== second.entryType) return first.entryType === "income" ? -1 : 1;
+    return first.sortOrder - second.sortOrder;
+  });
+
+  async function parseBudgetExcel(file: File) {
+    const xlsx = await import("xlsx");
+    const buffer = await file.arrayBuffer();
+    const workbook = xlsx.read(buffer, { type: "array" });
+    const worksheet = workbook.Sheets[workbook.SheetNames[0]];
+    const rows = xlsx.utils.sheet_to_json<string[]>(worksheet, { header: 1, defval: "" });
+    const parsedRows = parseBudgetRows(rows, yearId, allCategories);
+    setImportRows(parsedRows);
+    setImportMessage(`已解析 ${parsedRows.length} 筆年度預算科目，請確認後再寫入。`);
+  }
+
+  function updateImportRow(previewId: string, patch: Partial<BudgetImportRow>) {
+    setImportRows((currentRows) =>
+      currentRows.map((row) => (row.previewId === previewId ? { ...row, ...patch } : row))
+    );
+  }
+
+  async function confirmImport() {
+    const validRows = importRows.filter((row) => !validateCategoryLike(row));
+    if (validRows.length === 0) {
+      setImportMessage("沒有可寫入的科目。");
+      return;
+    }
+    if (!window.confirm(`確認寫入 ${validRows.length} 筆年度預算科目？`)) return;
+
+    let savedCount = 0;
+    for (const row of validRows) {
+      const savedCategory = await onSaveCategory(row);
+      if (savedCategory) savedCount += 1;
+    }
+    setImportRows([]);
+    setImportMessage(`年度預算匯入完成：${savedCount} 筆。`);
+  }
+
+  async function submitCategoryForm(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+    const existingCategory = editingCategoryId
+      ? categories.find((category) => category.id === editingCategoryId)
+      : undefined;
+    const hasEntries = existingCategory
+      ? entries.some((entry) => sameCategory(entry, existingCategory))
+      : false;
+    const nameChanged =
+      existingCategory &&
+      (existingCategory.groupName !== categoryForm.groupName ||
+        existingCategory.name !== categoryForm.name);
+    if (hasEntries && nameChanged) {
+      const confirmed = window.confirm("此科目已有交易紀錄，修改名稱可能影響歷史報表分類。確定要修改？");
+      if (!confirmed) return;
+    }
+
+    const savedCategory = await onSaveCategory({ ...categoryForm, rotaryYearId: yearId });
+    if (savedCategory) {
+      setIsFormOpen(false);
+      setEditingCategoryId("");
+      setCategoryForm({
+        id: "",
+        rotaryYearId: yearId,
+        entryType: "income",
+        groupName: "",
+        name: "",
+        annualBudget: 0,
+        sortOrder: 1000,
+        isActive: true,
+      });
+    }
+  }
+
+  function editCategory(category: AccountingCategory) {
+    setEditingCategoryId(category.id);
+    setCategoryForm({
+      id: category.id,
+      rotaryYearId: category.rotaryYearId,
+      entryType: category.entryType,
+      groupName: category.groupName,
+      name: category.name,
+      annualBudget: category.annualBudget,
+      sortOrder: category.sortOrder,
+      isActive: category.isActive,
+    });
+    setIsFormOpen(true);
+  }
+
   return (
-    <section className="space-y-3 print:hidden">
-      {categories.map((category) => {
+    <section className="space-y-5 print:hidden">
+      <div className="rounded-3xl bg-white/85 p-5 shadow-[8px_8px_20px_rgba(0,0,0,0.12),-8px_-8px_20px_rgba(255,255,255,0.9)]">
+        <h2 className="text-2xl font-bold">年度預算總覽</h2>
+        <label className="mt-4 block">
+          <span className="text-sm font-bold">年度</span>
+          <select
+            value={yearId}
+            onChange={(event) => onYearChange(event.target.value)}
+            className="mt-2 w-full rounded-2xl border border-[#E5D9BD] bg-white px-4 py-3"
+          >
+            {years.map((year) => (
+              <option key={year.id} value={year.id}>
+                {year.displayName || year.name}
+              </option>
+            ))}
+          </select>
+        </label>
+        <div className="mt-4 grid gap-3 sm:grid-cols-3">
+          <SummaryBox label="收入預算合計" value={incomeBudget} />
+          <SummaryBox label="支出預算合計" value={expenseBudget} />
+          <SummaryBox label="預算差額" value={budgetDifference} />
+        </div>
+        {budgetDifference !== 0 ? (
+          <p className="mt-4 rounded-2xl bg-[#FFF6D6] p-4 text-sm font-bold">
+            本年度收入與支出預算尚未平衡，差額 {formatCurrency(budgetDifference)}。
+          </p>
+        ) : null}
+      </div>
+
+      <div className="rounded-3xl bg-white/85 p-5 shadow-[8px_8px_20px_rgba(0,0,0,0.12),-8px_-8px_20px_rgba(255,255,255,0.9)]">
+        <h2 className="text-xl font-bold">匯入年度預算 Excel</h2>
+        <p className="mt-2 text-sm font-semibold text-[#173B73]/70">
+          只匯入收入/支出類型、預算大項、子科目、年度預算與排序；不匯入任何月實際金額或資產負債金額。
+        </p>
+        <input
+          type="file"
+          accept=".xlsx,.xls"
+          onChange={(event) => {
+            const file = event.target.files?.[0];
+            if (file) void parseBudgetExcel(file);
+            event.currentTarget.value = "";
+          }}
+          className="mt-4 w-full rounded-2xl border border-[#E5D9BD] bg-white px-4 py-3"
+        />
+        {importMessage ? <p className="mt-3 rounded-2xl bg-green-50 p-3 text-sm font-bold text-green-700">{importMessage}</p> : null}
+        {importRows.length > 0 ? (
+          <div className="mt-4 space-y-3">
+            <div className="max-h-[520px] space-y-3 overflow-y-auto pr-1">
+              {importRows.map((row) => (
+                <article key={row.previewId} className="rounded-2xl bg-[#F8F3E8] p-4">
+                  <div className="flex items-start justify-between gap-3">
+                    <p className="font-bold">{row.entryType === "income" ? "收入" : "支出"}｜{row.groupName} / {row.name || "未填科目"}</p>
+                    <span className={`shrink-0 rounded-full px-3 py-1 text-xs font-bold ${row.error ? "bg-red-100 text-red-700" : "bg-white text-[#173B73]"}`}>
+                      {row.error || row.status}
+                    </span>
+                  </div>
+                  <div className="mt-3 grid gap-2 sm:grid-cols-2">
+                    <select value={row.entryType} onChange={(event) => updateImportRow(row.previewId, { entryType: event.target.value as EntryType })} className="rounded-2xl border border-[#E5D9BD] px-3 py-2">
+                      <option value="income">收入</option>
+                      <option value="expense">支出</option>
+                    </select>
+                    <input value={row.groupName} onChange={(event) => updateImportRow(row.previewId, { groupName: event.target.value })} className="rounded-2xl border border-[#E5D9BD] px-3 py-2" />
+                    <input value={row.name} onChange={(event) => updateImportRow(row.previewId, { name: event.target.value })} className="rounded-2xl border border-[#E5D9BD] px-3 py-2" />
+                    <input type="number" min={0} value={row.annualBudget} onChange={(event) => updateImportRow(row.previewId, { annualBudget: Math.max(0, Number(event.target.value) || 0) })} className="rounded-2xl border border-[#E5D9BD] px-3 py-2" />
+                    <input type="number" value={row.sortOrder} onChange={(event) => updateImportRow(row.previewId, { sortOrder: Number(event.target.value) || 0 })} className="rounded-2xl border border-[#E5D9BD] px-3 py-2" />
+                  </div>
+                </article>
+              ))}
+            </div>
+            <button type="button" onClick={confirmImport} className={`w-full rounded-2xl bg-[#F7C948] py-4 font-bold ${buttonShadow}`}>
+              確認匯入年度預算
+            </button>
+          </div>
+        ) : null}
+      </div>
+
+      <button
+        type="button"
+        onClick={() => {
+          setIsFormOpen((currentValue) => !currentValue);
+          setEditingCategoryId("");
+          setCategoryForm({
+            id: "",
+            rotaryYearId: yearId,
+            entryType: "income",
+            groupName: "",
+            name: "",
+            annualBudget: 0,
+            sortOrder: 1000,
+            isActive: true,
+          });
+        }}
+        className={`w-full rounded-2xl bg-[#F7C948] py-4 font-bold ${buttonShadow}`}
+      >
+        {isFormOpen ? "收合預算科目表單" : "新增預算科目"}
+      </button>
+
+      {isFormOpen ? (
+        <form onSubmit={submitCategoryForm} className="space-y-4 rounded-3xl bg-white/85 p-5 shadow-[8px_8px_20px_rgba(0,0,0,0.12),-8px_-8px_20px_rgba(255,255,255,0.9)]">
+          <h2 className="text-xl font-bold">{editingCategoryId ? "編輯預算科目" : "新增預算科目"}</h2>
+          <label className="block">
+            <span className="text-sm font-bold">類型</span>
+            <select value={categoryForm.entryType} onChange={(event) => setCategoryForm({ ...categoryForm, entryType: event.target.value as EntryType })} className="mt-2 w-full rounded-2xl border border-[#E5D9BD] bg-white px-4 py-3">
+              <option value="income">收入</option>
+              <option value="expense">支出</option>
+            </select>
+          </label>
+          <Input label="預算大項" value={categoryForm.groupName} onChange={(value) => setCategoryForm({ ...categoryForm, groupName: value })} required />
+          <Input label="子科目名稱" value={categoryForm.name} onChange={(value) => setCategoryForm({ ...categoryForm, name: value })} required />
+          <Input label="年度預算" type="number" value={String(categoryForm.annualBudget)} onChange={(value) => setCategoryForm({ ...categoryForm, annualBudget: Math.max(0, Number(value) || 0) })} />
+          <Input label="顯示順序" type="number" value={String(categoryForm.sortOrder)} onChange={(value) => setCategoryForm({ ...categoryForm, sortOrder: Number(value) || 0 })} />
+          <label className="flex items-center gap-2 text-sm font-bold">
+            <input type="checkbox" checked={categoryForm.isActive} onChange={(event) => setCategoryForm({ ...categoryForm, isActive: event.target.checked })} />
+            啟用
+          </label>
+          <button type="submit" className={`w-full rounded-2xl bg-[#F7C948] py-4 font-bold ${buttonShadow}`}>
+            儲存預算科目
+          </button>
+        </form>
+      ) : null}
+
+      {sortedCategories.map((category) => {
         const spent = entries
           .filter((entry) => sameCategory(entry, category))
           .reduce((total, entry) => total + entry.amount, 0);
         const rate = category.annualBudget > 0 ? Math.round((spent / category.annualBudget) * 100) : 0;
+        const hasEntries = entries.some((entry) => sameCategory(entry, category));
         return (
           <div key={category.id} className="rounded-3xl bg-white/85 p-5">
-            <p className="text-sm font-bold text-[#C99700]">{category.entryType === "income" ? "收入" : "支出"} / {category.groupName}</p>
-            <h3 className="text-xl font-bold">{category.name}</h3>
-            <input type="number" value={category.annualBudget} onChange={(event) => onUpdateBudget(category, Number(event.target.value) || 0)} className="mt-3 w-full rounded-2xl border border-[#E5D9BD] px-4 py-3" />
+            <div className="flex items-start justify-between gap-3">
+              <div>
+                <p className="text-sm font-bold text-[#C99700]">{category.entryType === "income" ? "收入" : "支出"} / {category.groupName}</p>
+                <h3 className="text-xl font-bold">{category.name}</h3>
+              </div>
+              <span className={`shrink-0 rounded-full px-3 py-1 text-xs font-bold text-white ${category.isActive ? "bg-[#173B73]" : "bg-[#F47C6C]"}`}>
+                {category.isActive ? "啟用" : "停用"}
+              </span>
+            </div>
+            <input type="number" min={0} value={category.annualBudget} onChange={(event) => onUpdateBudget(category, Math.max(0, Number(event.target.value) || 0))} className="mt-3 w-full rounded-2xl border border-[#E5D9BD] px-4 py-3" />
             <p className="mt-2 text-sm font-bold">
               已執行：{formatCurrency(spent)}｜
               年度預算：{category.annualBudget > 0 ? formatCurrency(category.annualBudget) : "未設定"}｜
               餘額：{category.annualBudget > 0 ? formatCurrency(category.entryType === "income" ? spent - category.annualBudget : category.annualBudget - spent) : "—"}｜
               執行率：{category.annualBudget > 0 ? `${rate}%` : "—"}
             </p>
+            <div className="mt-4 grid grid-cols-3 gap-2">
+              <button type="button" onClick={() => editCategory(category)} className={`rounded-2xl bg-[#F7C948] py-3 text-sm font-bold ${buttonShadow}`}>
+                編輯
+              </button>
+              <button type="button" onClick={() => void onSaveCategory({ ...category, isActive: !category.isActive })} className={`rounded-2xl bg-white py-3 text-sm font-bold ${buttonShadow}`}>
+                {category.isActive ? "停用" : "啟用"}
+              </button>
+              <button type="button" disabled={hasEntries} onClick={() => onDeleteCategory(category)} className={`rounded-2xl bg-white py-3 text-sm font-bold disabled:opacity-50 ${buttonShadow}`}>
+                刪除
+              </button>
+            </div>
+            {hasEntries ? <p className="mt-2 text-xs font-bold text-[#173B73]/60">已有交易紀錄，僅可停用，不可刪除。</p> : null}
           </div>
         );
       })}
     </section>
+  );
+}
+
+function SummaryBox({ label, value }: { label: string; value: number }) {
+  return (
+    <div className="rounded-2xl bg-[#F8F3E8] p-4 font-bold">
+      <p className="text-sm text-[#173B73]/70">{label}</p>
+      <p className="mt-1 text-xl">{formatCurrency(value)}</p>
+    </div>
   );
 }
 
@@ -880,6 +1234,176 @@ function Money({ value }: { value: number }) {
 
 function Input({ label, value, onChange, type = "text", required }: { label: string; value: string; onChange: (value: string) => void; type?: string; required?: boolean }) {
   return <label className="block"><span className="text-sm font-bold">{label}</span><input required={required} type={type} value={value} onChange={(event) => onChange(event.target.value)} className="mt-2 w-full rounded-2xl border border-[#E5D9BD] bg-white px-4 py-3" /></label>;
+}
+
+function parseBudgetRows(
+  rows: string[][],
+  rotaryYearId: string,
+  existingCategories: AccountingCategory[]
+): BudgetImportRow[] {
+  const parsedRows: BudgetImportRow[] = [];
+  let currentType: EntryType | "" = "";
+  let currentGroup = "";
+  let groupSort = 0;
+  let childSort = 0;
+
+  rows.forEach((row, index) => {
+    const firstCell = cleanCell(row[0]);
+    const secondCell = cleanCell(row[1]);
+    const thirdCell = row[2];
+    const combinedCells = `${firstCell} ${secondCell}`;
+
+    if (firstCell.includes("收入科目") || secondCell.includes("收入科目")) {
+      currentType = "income";
+      currentGroup = "";
+      groupSort = 0;
+      childSort = 0;
+      return;
+    }
+    if (firstCell.includes("支出科目") || secondCell.includes("支出科目")) {
+      currentType = "expense";
+      currentGroup = "";
+      groupSort = 0;
+      childSort = 0;
+      return;
+    }
+    if (
+      (combinedCells.includes("收入預算") || combinedCells.includes("支出預算")) &&
+      !combinedCells.includes("收入科目") &&
+      !combinedCells.includes("支出科目")
+    ) {
+      currentType = "";
+      currentGroup = "";
+      return;
+    }
+    if (!currentType || firstCell === "合計") return;
+
+    const groupName = parseGroupName(firstCell);
+    if (groupName) {
+      currentGroup = groupName;
+      groupSort += 1000;
+      childSort = 0;
+      const nextHasChild = hasFollowingChild(rows, index);
+      if (!nextHasChild) {
+        parsedRows.push(
+          buildImportRow({
+            rotaryYearId,
+            entryType: currentType,
+            groupName: currentGroup,
+            name: currentGroup.replace(/^\d+\.\s*/, ""),
+            annualBudget: parseBudgetAmount(thirdCell),
+            sortOrder: groupSort + 10,
+            existingCategories,
+          })
+        );
+      }
+      return;
+    }
+
+    if (secondCell) {
+      childSort += 10;
+      parsedRows.push(
+        buildImportRow({
+          rotaryYearId,
+          entryType: currentType,
+          groupName: currentGroup || "未分類",
+          name: secondCell,
+          annualBudget: parseBudgetAmount(thirdCell),
+          sortOrder: groupSort + childSort,
+          existingCategories,
+        })
+      );
+    }
+  });
+
+  return parsedRows;
+}
+
+function buildImportRow({
+  rotaryYearId,
+  entryType,
+  groupName,
+  name,
+  annualBudget,
+  sortOrder,
+  existingCategories,
+}: {
+  rotaryYearId: string;
+  entryType: EntryType;
+  groupName: string;
+  name: string;
+  annualBudget: number;
+  sortOrder: number;
+  existingCategories: AccountingCategory[];
+}): BudgetImportRow {
+  const existingCategory = existingCategories.find(
+    (category) =>
+      category.rotaryYearId === rotaryYearId &&
+      category.entryType === entryType &&
+      category.groupName === groupName &&
+      category.name === name
+  );
+  const error = !name ? "找不到科目名稱" : annualBudget < 0 ? "格式錯誤" : "";
+  const status = error
+    ? error
+    : existingCategory
+      ? existingCategory.annualBudget === annualBudget && existingCategory.sortOrder === sortOrder
+        ? "金額未變"
+        : "更新既有科目"
+      : "新增科目";
+
+  return {
+    previewId: crypto.randomUUID(),
+    id: existingCategory?.id ?? "",
+    rotaryYearId,
+    entryType,
+    groupName,
+    name,
+    annualBudget,
+    sortOrder,
+    isActive: true,
+    status,
+    error,
+  };
+}
+
+function validateCategoryLike(category: Pick<CategoryFormState, "rotaryYearId" | "groupName" | "name" | "annualBudget">) {
+  if (!category.rotaryYearId) return "未選擇年度";
+  if (!category.groupName.trim()) return "格式錯誤";
+  if (!category.name.trim()) return "找不到科目名稱";
+  if (!Number.isInteger(category.annualBudget) || category.annualBudget < 0) return "格式錯誤";
+  return "";
+}
+
+function hasFollowingChild(rows: string[][], groupIndex: number) {
+  for (let index = groupIndex + 1; index < rows.length; index += 1) {
+    const firstCell = cleanCell(rows[index][0]);
+    const secondCell = cleanCell(rows[index][1]);
+    if (firstCell === "合計") return false;
+    if (parseGroupName(firstCell)) return false;
+    if (secondCell) return true;
+  }
+  return false;
+}
+
+function parseGroupName(value: string) {
+  const trimmedValue = cleanCell(value);
+  return /^\d+[.．]/.test(trimmedValue) ? trimmedValue : "";
+}
+
+function parseBudgetAmount(value: unknown) {
+  if (typeof value === "number") return Math.max(0, Math.round(value));
+  if (typeof value === "string") {
+    const parsed = Number(value.replaceAll(",", "").trim());
+    return Number.isFinite(parsed) ? Math.max(0, Math.round(parsed)) : 0;
+  }
+  return 0;
+}
+
+function cleanCell(value: unknown) {
+  if (typeof value === "number") return String(value);
+  if (typeof value !== "string") return "";
+  return value.replace(/\s+/g, " ").trim();
 }
 
 function buildReport(categories: AccountingCategory[], monthEntries: AccountingEntry[], yearEntries: AccountingEntry[], balanceItems: BalanceSheetItem[]) {
