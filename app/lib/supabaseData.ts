@@ -1,6 +1,6 @@
 import { supabase } from "@/src/lib/supabase";
 import { DuesLineItem, DuesRecord, PaymentMethod } from "@/lib/dues";
-import { EventItem, RotaryYear } from "@/lib/events";
+import { defaultRotaryYears, EventItem, RotaryYear } from "@/lib/events";
 import { Member, normalizeMember, sortMembersByName } from "@/lib/members";
 import { ProgramItem } from "@/lib/programs";
 
@@ -53,9 +53,59 @@ export async function fetchRotaryYears() {
   const { data, error } = await supabase
     .from("rotary_years")
     .select("*")
-    .order("start_date", { ascending: false });
+    .order("start_date", { ascending: true });
   if (error) throw error;
-  return (data ?? []).map(mapRotaryYearFromRow);
+  const years = (data ?? []).map(mapRotaryYearFromRow);
+  const missingYears = defaultRotaryYears.filter(
+    (defaultYear) => !years.some((year) => year.name === defaultYear.name)
+  );
+
+  if (missingYears.length > 0) {
+    const hasActiveYear = years.some((year) => year.isActive);
+    const { error: insertError } = await supabase.from("rotary_years").insert(
+      missingYears.map((year) => ({
+        id: crypto.randomUUID(),
+        name: year.name,
+        display_name: year.displayName,
+        start_date: year.startDate,
+        end_date: year.endDate,
+        is_active: year.name === "2026-2027" ? !hasActiveYear : false,
+      }))
+    );
+    if (insertError) throw insertError;
+
+    const refreshed = await supabase
+      .from("rotary_years")
+      .select("*")
+      .order("start_date", { ascending: true });
+    if (refreshed.error) throw refreshed.error;
+    return (refreshed.data ?? []).map(mapRotaryYearFromRow);
+  }
+
+  return years;
+}
+
+export async function upsertRotaryYear(year: RotaryYear) {
+  if (year.isActive) {
+    const { error: updateError } = await supabase
+      .from("rotary_years")
+      .update({ is_active: false })
+      .neq("id", year.id);
+    if (updateError) throw updateError;
+  }
+
+  const { data, error } = await supabase
+    .from("rotary_years")
+    .upsert(mapRotaryYearToRow(year), { onConflict: "id" })
+    .select()
+    .single();
+  if (error) throw error;
+  return mapRotaryYearFromRow(data);
+}
+
+export async function deleteRotaryYear(yearId: string) {
+  const { error } = await supabase.from("rotary_years").delete().eq("id", yearId);
+  if (error) throw error;
 }
 
 export async function upsertEvent(eventItem: EventItem) {
@@ -170,6 +220,17 @@ function mapRotaryYearFromRow(row: DbRecord): RotaryYear {
     endDate: text(row.end_date),
     isActive: Boolean(row.is_active),
     createdAt: text(row.created_at),
+  };
+}
+
+function mapRotaryYearToRow(year: RotaryYear) {
+  return {
+    id: year.id,
+    name: year.name,
+    display_name: year.displayName,
+    start_date: emptyToNull(year.startDate),
+    end_date: emptyToNull(year.endDate),
+    is_active: year.isActive,
   };
 }
 

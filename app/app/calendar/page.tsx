@@ -1,9 +1,24 @@
 ﻿"use client";
 
 import Link from "next/link";
-import { useEffect, useMemo, useState } from "react";
+import { FormEvent, useEffect, useMemo, useState } from "react";
 import { EventItem, RotaryYear, sortEventsByDate } from "@/lib/events";
-import { fetchEvents, fetchRotaryYears } from "@/lib/supabaseData";
+import {
+  deleteRotaryYear,
+  fetchEvents,
+  fetchRotaryYears,
+  upsertRotaryYear,
+} from "@/lib/supabaseData";
+
+type YearFormState = Omit<RotaryYear, "id" | "createdAt">;
+
+const emptyYearForm: YearFormState = {
+  name: "",
+  displayName: "",
+  startDate: "",
+  endDate: "",
+  isActive: false,
+};
 
 const buttonShadow =
   "shadow-[6px_6px_12px_rgba(0,0,0,0.18),-4px_-4px_10px_rgba(255,255,255,0.85)] active:translate-y-1 active:shadow-inner";
@@ -16,6 +31,9 @@ export default function CalendarPage() {
   const [errorMessage, setErrorMessage] = useState("");
   const [expandedEventId, setExpandedEventId] = useState("");
   const [highlightedEventId, setHighlightedEventId] = useState("");
+  const [isYearFormOpen, setIsYearFormOpen] = useState(false);
+  const [yearForm, setYearForm] = useState<YearFormState>(emptyYearForm);
+  const [editingYearId, setEditingYearId] = useState<string | null>(null);
 
   async function loadData() {
     try {
@@ -83,6 +101,120 @@ export default function CalendarPage() {
     window.setTimeout(() => setHighlightedEventId(""), 1800);
   }
 
+  function resetYearForm() {
+    setYearForm(emptyYearForm);
+    setEditingYearId(null);
+  }
+
+  function handleEditYear(year: RotaryYear) {
+    setYearForm({
+      name: year.name,
+      displayName: year.displayName,
+      startDate: year.startDate,
+      endDate: year.endDate,
+      isActive: year.isActive,
+    });
+    setEditingYearId(year.id);
+    setIsYearFormOpen(true);
+  }
+
+  async function handleSubmitYear(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+    setErrorMessage("");
+
+    const duplicateYear = years.find(
+      (year) => year.name === yearForm.name && year.id !== editingYearId
+    );
+    if (duplicateYear) {
+      setErrorMessage("年度名稱不可重複。");
+      return;
+    }
+
+    if (yearForm.startDate > yearForm.endDate) {
+      setErrorMessage("年度開始日期不可晚於結束日期。");
+      return;
+    }
+
+    const overlappedYear = years.find(
+      (year) =>
+        year.id !== editingYearId &&
+        yearForm.startDate <= year.endDate &&
+        yearForm.endDate >= year.startDate
+    );
+    if (overlappedYear) {
+      setErrorMessage(`年度日期不可重疊：${overlappedYear.displayName || overlappedYear.name}`);
+      return;
+    }
+
+    try {
+      const savedYear = await upsertRotaryYear({
+        id: editingYearId ?? crypto.randomUUID(),
+        ...yearForm,
+        createdAt: new Date().toISOString(),
+      });
+
+      setYears((currentYears) => {
+        const nextYears = currentYears.some((year) => year.id === savedYear.id)
+          ? currentYears.map((year) => (year.id === savedYear.id ? savedYear : year))
+          : [...currentYears, savedYear];
+        return nextYears
+          .map((year) =>
+            savedYear.isActive && year.id !== savedYear.id
+              ? { ...year, isActive: false }
+              : year
+          )
+          .sort((firstYear, secondYear) =>
+            firstYear.startDate.localeCompare(secondYear.startDate)
+          );
+      });
+      if (savedYear.isActive || !selectedYearId) {
+        setSelectedYearId(savedYear.id);
+        setCurrentMonth(savedYear.startDate.slice(0, 7));
+      }
+      resetYearForm();
+      setIsYearFormOpen(false);
+    } catch (error) {
+      console.error(error);
+      setErrorMessage(
+        error instanceof Error ? `年度儲存失敗：${error.message}` : "年度儲存失敗"
+      );
+    }
+  }
+
+  async function handleDeleteYear(year: RotaryYear) {
+    const hasEvents = events.some((eventItem) => {
+      if (eventItem.rotaryYearId) {
+        return eventItem.rotaryYearId === year.id;
+      }
+
+      return eventItem.date >= year.startDate && eventItem.date <= year.endDate;
+    });
+    if (hasEvents) {
+      setErrorMessage("此年度已有活動，不能刪除。");
+      return;
+    }
+
+    const confirmed = window.confirm(`確定要刪除 ${year.displayName || year.name} 嗎？`);
+    if (!confirmed) return;
+    const confirmedAgain = window.confirm("再次確認：刪除後無法復原。");
+    if (!confirmedAgain) return;
+
+    try {
+      await deleteRotaryYear(year.id);
+      setYears((currentYears) => currentYears.filter((item) => item.id !== year.id));
+      if (selectedYearId === year.id) {
+        const nextYear = years.find((item) => item.id !== year.id);
+        setSelectedYearId(nextYear?.id ?? "");
+        setCurrentMonth(nextYear?.startDate.slice(0, 7) ?? "");
+      }
+    } catch (error) {
+      console.error(error);
+      setErrorMessage(
+        error instanceof Error ? `年度刪除失敗：${error.message}` : "年度刪除失敗"
+      );
+    }
+  }
+
   return (
     <main className="min-h-screen bg-[#F8F3E8] px-4 py-6 text-[#173B73]">
       <section className="mx-auto max-w-5xl space-y-6">
@@ -104,6 +236,123 @@ export default function CalendarPage() {
           </p>
         ) : null}
 
+        <section className="mx-auto max-w-md rounded-3xl bg-white/85 p-5 shadow-[8px_8px_20px_rgba(0,0,0,0.12),-8px_-8px_20px_rgba(255,255,255,0.9)]">
+          <button
+            type="button"
+            onClick={() => {
+              if (isYearFormOpen) resetYearForm();
+              setIsYearFormOpen((currentValue) => !currentValue);
+            }}
+            className="flex w-full items-center justify-between gap-3 text-left"
+          >
+            <span className="text-xl font-bold">
+              {editingYearId ? "編輯年度" : "新增年度"}
+            </span>
+            <span className={`rounded-2xl bg-[#F7C948] px-4 py-2 text-sm font-bold ${buttonShadow}`}>
+              {isYearFormOpen ? "收合" : "展開"}
+            </span>
+          </button>
+
+          {isYearFormOpen ? (
+            <form onSubmit={handleSubmitYear} className="mt-5 space-y-4">
+              <label className="block">
+                <span className="text-sm font-bold">年度名稱</span>
+                <input
+                  required
+                  value={yearForm.name}
+                  onChange={(event) =>
+                    setYearForm((currentForm) => ({
+                      ...currentForm,
+                      name: event.target.value,
+                    }))
+                  }
+                  placeholder="2032-2033"
+                  className="mt-2 w-full rounded-2xl border border-[#E5D9BD] bg-white px-4 py-3 outline-none focus:border-[#173B73] focus:ring-2 focus:ring-[#F7C948]"
+                />
+              </label>
+              <label className="block">
+                <span className="text-sm font-bold">顯示名稱</span>
+                <input
+                  required
+                  value={yearForm.displayName}
+                  onChange={(event) =>
+                    setYearForm((currentForm) => ({
+                      ...currentForm,
+                      displayName: event.target.value,
+                    }))
+                  }
+                  placeholder="32-33年度"
+                  className="mt-2 w-full rounded-2xl border border-[#E5D9BD] bg-white px-4 py-3 outline-none focus:border-[#173B73] focus:ring-2 focus:ring-[#F7C948]"
+                />
+              </label>
+              <div className="grid grid-cols-2 gap-3">
+                <label className="block">
+                  <span className="text-sm font-bold">開始日期</span>
+                  <input
+                    required
+                    type="date"
+                    value={yearForm.startDate}
+                    onChange={(event) =>
+                      setYearForm((currentForm) => ({
+                        ...currentForm,
+                        startDate: event.target.value,
+                      }))
+                    }
+                    className="mt-2 w-full rounded-2xl border border-[#E5D9BD] bg-white px-3 py-3 outline-none focus:border-[#173B73] focus:ring-2 focus:ring-[#F7C948]"
+                  />
+                </label>
+                <label className="block">
+                  <span className="text-sm font-bold">結束日期</span>
+                  <input
+                    required
+                    type="date"
+                    value={yearForm.endDate}
+                    onChange={(event) =>
+                      setYearForm((currentForm) => ({
+                        ...currentForm,
+                        endDate: event.target.value,
+                      }))
+                    }
+                    className="mt-2 w-full rounded-2xl border border-[#E5D9BD] bg-white px-3 py-3 outline-none focus:border-[#173B73] focus:ring-2 focus:ring-[#F7C948]"
+                  />
+                </label>
+              </div>
+              <label className="flex items-center gap-3 rounded-2xl bg-[#F8F3E8] p-4 font-bold">
+                <input
+                  type="checkbox"
+                  checked={yearForm.isActive}
+                  onChange={(event) =>
+                    setYearForm((currentForm) => ({
+                      ...currentForm,
+                      isActive: event.target.checked,
+                    }))
+                  }
+                  className="h-5 w-5"
+                />
+                設為目前年度
+              </label>
+              <div className="grid grid-cols-2 gap-3">
+                <button
+                  type="submit"
+                  className={`rounded-2xl bg-[#F7C948] py-3 font-bold ${buttonShadow}`}
+                >
+                  儲存年度
+                </button>
+                <button
+                  type="button"
+                  onClick={() => {
+                    resetYearForm();
+                    setIsYearFormOpen(false);
+                  }}
+                  className={`rounded-2xl bg-white py-3 font-bold ${buttonShadow}`}
+                >
+                  取消
+                </button>
+              </div>
+            </form>
+          ) : null}
+        </section>
+
         <section className="mx-auto grid max-w-md grid-cols-1 gap-3">
           {years.length === 0 ? (
             <div className="rounded-3xl bg-white/80 p-5 text-center font-bold">
@@ -111,22 +360,47 @@ export default function CalendarPage() {
             </div>
           ) : (
             years.map((year) => (
-              <button
+              <article
                 key={year.id}
-                type="button"
-                onClick={() => {
-                  setSelectedYearId(year.id);
-                  setCurrentMonth(year.startDate.slice(0, 7));
-                }}
-                className={`rounded-3xl p-5 text-left font-bold ${
+                className={`rounded-3xl p-5 font-bold ${
                   selectedYearId === year.id ? "bg-[#F7C948]" : "bg-white/85"
                 } ${buttonShadow}`}
               >
-                <span className="block text-2xl">{year.displayName || year.name}</span>
-                <span className="mt-1 block text-sm text-[#173B73]/70">
-                  {year.startDate.replaceAll("-", "/")} - {year.endDate.replaceAll("-", "/")}
-                </span>
-              </button>
+                <button
+                  type="button"
+                  onClick={() => {
+                    setSelectedYearId(year.id);
+                    setCurrentMonth(year.startDate.slice(0, 7));
+                  }}
+                  className="w-full text-left"
+                >
+                  <span className="block text-2xl">{year.displayName || year.name}</span>
+                  <span className="mt-1 block text-sm text-[#173B73]/70">
+                    {year.startDate.replaceAll("-", "/")} - {year.endDate.replaceAll("-", "/")}
+                  </span>
+                  {year.isActive ? (
+                    <span className="mt-3 inline-flex rounded-full bg-[#173B73] px-3 py-1 text-xs text-white">
+                      目前年度
+                    </span>
+                  ) : null}
+                </button>
+                <div className="mt-4 grid grid-cols-2 gap-3">
+                  <button
+                    type="button"
+                    onClick={() => handleEditYear(year)}
+                    className={`rounded-2xl bg-white py-2 text-sm font-bold ${buttonShadow}`}
+                  >
+                    編輯
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => void handleDeleteYear(year)}
+                    className={`rounded-2xl bg-white py-2 text-sm font-bold ${buttonShadow}`}
+                  >
+                    刪除
+                  </button>
+                </div>
+              </article>
             ))
           )}
         </section>

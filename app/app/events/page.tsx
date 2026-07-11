@@ -3,6 +3,7 @@
 import Link from "next/link";
 import { FormEvent, useEffect, useMemo, useState } from "react";
 import {
+  defaultEventTimes,
   emptyEventItem,
   EventItem,
   RotaryYear,
@@ -82,7 +83,7 @@ export default function EventsPage() {
   }
 
   function resetForm() {
-    setForm({ ...emptyEventItem, rotaryYearId: activeYearId });
+    setForm({ ...emptyEventItem, ...defaultEventTimes, rotaryYearId: activeYearId });
     setEditingId(null);
   }
 
@@ -186,6 +187,8 @@ export default function EventsPage() {
             type="button"
             onClick={() => {
               if (isFormOpen && editingId) {
+                resetForm();
+              } else if (!isFormOpen && !editingId) {
                 resetForm();
               }
               setIsFormOpen((currentValue) => !currentValue);
