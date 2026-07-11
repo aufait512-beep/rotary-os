@@ -1,0 +1,26 @@
+# 新電腦換機檢查表
+
+- [ ] 登入 GitHub
+- [ ] 安裝 Git
+- [ ] 安裝 Node.js
+- [ ] 安裝 VS Code
+- [ ] Clone Repository
+- [ ] 進入 `rotary-os/app`
+- [ ] `npm install`
+- [ ] 建立 `.env.local`
+- [ ] 填入 Supabase 環境變數
+- [ ] 填入 `OPENAI_API_KEY`
+- [ ] `npm run lint`
+- [ ] `npm run build`
+- [ ] `npm run dev`
+- [ ] 測試首頁
+- [ ] 測試年度
+- [ ] 測試活動
+- [ ] 測試程序表
+- [ ] 測試社友
+- [ ] 測試社費
+- [ ] 測試捐獻
+- [ ] 測試會計
+- [ ] 測試 Jade AI
+- [ ] 確認 GitHub push
+- [ ] 確認 Vercel Ready
