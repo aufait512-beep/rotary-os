@@ -67,7 +67,6 @@ type ReportRow = {
 };
 
 const tabs = ["收支登錄", "每月收支報表", "年度預算", "資產負債表"] as const;
-const targetBudgetTotal = 2508044;
 const buttonShadow =
   "shadow-[6px_6px_12px_rgba(0,0,0,0.18),-4px_-4px_10px_rgba(255,255,255,0.85)] active:translate-y-1 active:shadow-inner";
 const emptyEntry = {
@@ -802,13 +801,8 @@ function PassThroughSection({ entries }: { entries: AccountingEntry[] }) {
 }
 
 function BudgetTab({ categories, entries, onUpdateBudget }: { categories: AccountingCategory[]; entries: AccountingEntry[]; onUpdateBudget: (category: AccountingCategory, budget: number) => void }) {
-  const incomeBudget = categories.filter((category) => category.entryType === "income").reduce((total, category) => total + category.annualBudget, 0);
-  const expenseBudget = categories.filter((category) => category.entryType === "expense").reduce((total, category) => total + category.annualBudget, 0);
   return (
     <section className="space-y-3 print:hidden">
-      {(incomeBudget !== targetBudgetTotal || expenseBudget !== targetBudgetTotal) ? (
-        <Notice tone="warning">預算合計警告：收入 {formatCurrency(incomeBudget)}，支出 {formatCurrency(expenseBudget)}，正式預算應各為 {formatCurrency(targetBudgetTotal)}。</Notice>
-      ) : null}
       {categories.map((category) => {
         const spent = entries
           .filter((entry) => sameCategory(entry, category))
@@ -819,7 +813,12 @@ function BudgetTab({ categories, entries, onUpdateBudget }: { categories: Accoun
             <p className="text-sm font-bold text-[#C99700]">{category.entryType === "income" ? "收入" : "支出"} / {category.groupName}</p>
             <h3 className="text-xl font-bold">{category.name}</h3>
             <input type="number" value={category.annualBudget} onChange={(event) => onUpdateBudget(category, Number(event.target.value) || 0)} className="mt-3 w-full rounded-2xl border border-[#E5D9BD] px-4 py-3" />
-            <p className="mt-2 text-sm font-bold">已執行：{formatCurrency(spent)}｜餘額：{formatCurrency(category.entryType === "income" ? spent - category.annualBudget : category.annualBudget - spent)}｜執行率：{category.annualBudget > 0 ? `${rate}%` : "—"}</p>
+            <p className="mt-2 text-sm font-bold">
+              已執行：{formatCurrency(spent)}｜
+              年度預算：{category.annualBudget > 0 ? formatCurrency(category.annualBudget) : "未設定"}｜
+              餘額：{category.annualBudget > 0 ? formatCurrency(category.entryType === "income" ? spent - category.annualBudget : category.annualBudget - spent) : "—"}｜
+              執行率：{category.annualBudget > 0 ? `${rate}%` : "—"}
+            </p>
           </div>
         );
       })}
@@ -955,10 +954,6 @@ function buildReportRows(type: EntryType, monthEntries: AccountingEntry[], yearE
 
 function buildReportChecks(categories: AccountingCategory[], monthEntries: AccountingEntry[], report: ReturnType<typeof buildReport>) {
   const checks: string[] = [];
-  const incomeBudget = categories.filter((category) => category.entryType === "income").reduce((total, category) => total + category.annualBudget, 0);
-  const expenseBudget = categories.filter((category) => category.entryType === "expense").reduce((total, category) => total + category.annualBudget, 0);
-  if (incomeBudget !== targetBudgetTotal) checks.push(`收入預算合計為 ${formatCurrency(incomeBudget)}，正式預算應為 ${formatCurrency(targetBudgetTotal)}。`);
-  if (expenseBudget !== targetBudgetTotal) checks.push(`支出預算合計為 ${formatCurrency(expenseBudget)}，正式預算應為 ${formatCurrency(targetBudgetTotal)}。`);
   if (monthEntries.some((entry) => !entry.categoryId && entry.entryType === "income")) checks.push("存在未分類收入。");
   if (monthEntries.some((entry) => !entry.categoryId && entry.entryType === "expense")) checks.push("存在未分類支出。");
   if (monthEntries.some((entry) => entry.amount < 0)) checks.push("存在負數或異常金額。");
