@@ -608,6 +608,9 @@ function programToEventFallback(program: ProgramFormState): EventItem {
     room: program.room,
     topic: program.topic,
     speaker: program.speaker,
+    fellowshipChair: program.fellowshipChair,
+    sergeantAtArms: program.sergeantAtArms,
+    description: "",
     note: "",
   };
 }

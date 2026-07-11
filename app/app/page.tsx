@@ -8,7 +8,7 @@ const menuItems = [
   { label: "💰 社費管理", href: "/dues" },
   { label: "📊 會計收支", href: "/accounting" },
   { label: "❤️ 年度捐獻計畫", href: "/donations" },
-  { label: "AI 助理", href: "/events" },
+  { label: "Jade AI 助理", href: "/assistant" },
 ];
 
 export default function Home() {

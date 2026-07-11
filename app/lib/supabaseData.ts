@@ -1,6 +1,6 @@
 import { supabase } from "@/src/lib/supabase";
 import { DuesLineItem, DuesRecord, PaymentMethod } from "@/lib/dues";
-import { defaultRotaryYears, EventItem, RotaryYear } from "@/lib/events";
+import { EventItem, RotaryYear } from "@/lib/events";
 import { Member, normalizeMember, sortMembersByName } from "@/lib/members";
 import { ProgramItem } from "@/lib/programs";
 
@@ -55,34 +55,7 @@ export async function fetchRotaryYears() {
     .select("*")
     .order("start_date", { ascending: true });
   if (error) throw error;
-  const years = (data ?? []).map(mapRotaryYearFromRow);
-  const missingYears = defaultRotaryYears.filter(
-    (defaultYear) => !years.some((year) => year.name === defaultYear.name)
-  );
-
-  if (missingYears.length > 0) {
-    const hasActiveYear = years.some((year) => year.isActive);
-    const { error: insertError } = await supabase.from("rotary_years").insert(
-      missingYears.map((year) => ({
-        id: crypto.randomUUID(),
-        name: year.name,
-        display_name: year.displayName,
-        start_date: year.startDate,
-        end_date: year.endDate,
-        is_active: year.name === "2026-2027" ? !hasActiveYear : false,
-      }))
-    );
-    if (insertError) throw insertError;
-
-    const refreshed = await supabase
-      .from("rotary_years")
-      .select("*")
-      .order("start_date", { ascending: true });
-    if (refreshed.error) throw refreshed.error;
-    return (refreshed.data ?? []).map(mapRotaryYearFromRow);
-  }
-
-  return years;
+  return (data ?? []).map(mapRotaryYearFromRow);
 }
 
 export async function upsertRotaryYear(year: RotaryYear) {
@@ -313,6 +286,9 @@ function mapEventFromRow(row: DbRecord): EventItem {
     room: text(row.room),
     topic: text(row.topic),
     speaker: text(row.speaker),
+    fellowshipChair: text(row.fellowship_chair),
+    sergeantAtArms: text(row.sergeant_at_arms),
+    description: text(row.description),
     note: text(row.note),
   };
 }
@@ -333,6 +309,9 @@ function mapEventToRow(eventItem: EventItem) {
     room: eventItem.room,
     topic: eventItem.topic,
     speaker: eventItem.speaker,
+    fellowship_chair: eventItem.fellowshipChair,
+    sergeant_at_arms: eventItem.sergeantAtArms,
+    description: eventItem.description,
     note: eventItem.note,
   };
 }

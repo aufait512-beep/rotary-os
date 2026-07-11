@@ -129,6 +129,9 @@ export default function EventsPage() {
       room: eventItem.room,
       topic: eventItem.topic,
       speaker: eventItem.speaker,
+      fellowshipChair: eventItem.fellowshipChair,
+      sergeantAtArms: eventItem.sergeantAtArms,
+      description: eventItem.description,
       note: eventItem.note,
     });
     setEditingId(eventItem.id);

@@ -23,15 +23,6 @@ import {
 type DuesFormState = Omit<DuesRecord, "id" | "createdAt">;
 type NumericDuesField = "previousBalance" | "paidAmount";
 
-type Html2PdfWorker = {
-  set: (options: unknown) => Html2PdfWorker;
-  from: (element: HTMLElement) => Html2PdfWorker;
-  save: () => Promise<void>;
-  outputPdf: (type: "blob") => Promise<Blob>;
-};
-
-type Html2PdfFactory = () => Html2PdfWorker;
-
 const buttonShadow =
   "shadow-[6px_6px_12px_rgba(0,0,0,0.18),-4px_-4px_10px_rgba(255,255,255,0.85)] active:translate-y-1 active:shadow-inner";
 
@@ -211,48 +202,6 @@ export default function DuesPage() {
       : "高雄晨光扶輪社_社費紀錄.csv";
     link.click();
     URL.revokeObjectURL(url);
-  }
-
-  async function exportStatementPdf(record: DuesRecord) {
-    const statement = document.getElementById(`dues-statement-${record.id}`);
-    if (!statement) {
-      setErrorMessage("找不到社費通知單，請先展開該筆紀錄。");
-      return;
-    }
-
-    const exportElement = createExportElement(statement);
-
-    try {
-      setErrorMessage("");
-      setExportingId(record.id);
-      const html2pdfModule = await import("html2pdf.js");
-      const html2pdf = (html2pdfModule.default ?? html2pdfModule) as Html2PdfFactory;
-
-      const pdfBlob = await html2pdf()
-        .set({
-          filename: buildStatementFilename(record, sortedMembers, "pdf"),
-          margin: 0,
-          image: { type: "jpeg", quality: 0.98 },
-          html2canvas: {
-            scale: 3,
-            useCORS: true,
-            backgroundColor: "#ffffff",
-          },
-          jsPDF: {
-            unit: "mm",
-            format: "a4",
-            orientation: "portrait",
-          },
-        })
-        .from(exportElement)
-        .outputPdf("blob");
-      downloadBlob(pdfBlob, buildStatementFilename(record, sortedMembers, "pdf"));
-    } catch (error) {
-      setErrorMessage(getErrorMessage(error, "PDF 匯出失敗"));
-    } finally {
-      exportElement.remove();
-      setExportingId("");
-    }
   }
 
   async function exportStatementJpg(record: DuesRecord) {
@@ -592,14 +541,6 @@ export default function DuesPage() {
                         </button>
                         <button
                           type="button"
-                          onClick={() => void exportStatementPdf(record)}
-                          disabled={exportingId === record.id}
-                          className={`rounded-2xl bg-[#F7C948] py-3 font-bold disabled:opacity-60 ${buttonShadow}`}
-                        >
-                          📄 匯出 PDF
-                        </button>
-                        <button
-                          type="button"
                           onClick={() => void exportStatementJpg(record)}
                           disabled={exportingId === record.id}
                           className={`rounded-2xl bg-white py-3 font-bold disabled:opacity-60 ${buttonShadow}`}
@@ -869,21 +810,10 @@ function formatLineItemType(type: DuesLineItem["itemType"]) {
   return labels[type];
 }
 
-function buildStatementFilename(record: DuesRecord, members: Member[], extension: "pdf" | "jpg") {
+function buildStatementFilename(record: DuesRecord, members: Member[], extension: "jpg") {
   const memberName = sanitizeFilename(getMemberName(record.memberId, members)).replaceAll("_", "");
   const periodMonth = sanitizeFilename(record.periodMonth || "未填月份");
   return `高雄晨光扶輪社_社費通知_${memberName}_${periodMonth}.${extension}`;
-}
-
-function downloadBlob(blob: Blob, filename: string) {
-  const url = URL.createObjectURL(blob);
-  const link = document.createElement("a");
-  link.href = url;
-  link.download = filename;
-  document.body.appendChild(link);
-  link.click();
-  link.remove();
-  URL.revokeObjectURL(url);
 }
 
 function createExportElement(source: HTMLElement) {
