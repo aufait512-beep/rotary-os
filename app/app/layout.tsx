@@ -2,9 +2,19 @@ import type { Metadata } from "next";
 import "./globals.css";
 
 export const metadata: Metadata = {
-  title: "Rotary OS｜高雄晨光扶輪社智慧秘書系統",
-  description:
-    "Rotary OS 為扶輪社智慧秘書系統，整合社友管理、例會程序表、活動管理、社費、年度公益捐獻及 AI 智慧秘書。",
+  title: "高雄晨光扶輪社｜Rotary OS",
+  description: "高雄晨光扶輪社年度社務管理系統",
+  manifest: "/manifest.webmanifest",
+  icons: {
+    icon: [
+      { url: "/favicon.ico", sizes: "any" },
+      { url: "/sunlight-icon-32x32.png", sizes: "32x32", type: "image/png" },
+      { url: "/sunlight-icon-48x48.png", sizes: "48x48", type: "image/png" },
+    ],
+    apple: [
+      { url: "/apple-touch-icon.png", sizes: "180x180", type: "image/png" },
+    ],
+  },
 };
 
 function AppFooter() {
