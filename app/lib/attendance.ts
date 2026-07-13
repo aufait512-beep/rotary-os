@@ -40,7 +40,7 @@ export function emptyMeetingAttendance(
     responseStatus: "pending",
     plannedAttendance: false,
     actualAttendance: false,
-    plannedMeal: true,
+    plannedMeal: false,
     actualMeal: false,
     guestCount: 0,
     vegetarianCount: 0,
@@ -70,8 +70,6 @@ export function applyResponseStatus(
       ...record,
       responseStatus,
       plannedAttendance: true,
-      plannedMeal: true,
-      noMeal: false,
     };
   }
 
@@ -80,9 +78,6 @@ export function applyResponseStatus(
       ...record,
       responseStatus,
       plannedAttendance: false,
-      plannedMeal: false,
-      noMeal: true,
-      mealAmount: 0,
     };
   }
 
@@ -91,8 +86,6 @@ export function applyResponseStatus(
       ...record,
       responseStatus,
       plannedAttendance: false,
-      plannedMeal: false,
-      noMeal: false,
     };
   }
 
@@ -106,7 +99,7 @@ export function formatAttendanceStatus(status: AttendanceResponseStatus) {
   const labels: Record<AttendanceResponseStatus, string> = {
     pending: "待確認",
     attending: "出席",
-    absent: "請假",
+    absent: "不出席",
     no_response: "未回覆",
   };
   return labels[status];
@@ -118,36 +111,25 @@ export function buildAttendanceSummary(
 ) {
   const responded = records.filter((record) => record.responseStatus !== "pending").length;
   const plannedAttending = records.filter((record) => record.plannedAttendance).length;
-  const plannedMealMembers = records.filter(
-    (record) => record.plannedAttendance && record.plannedMeal && !record.noMeal
-  ).length;
   const guests = records.reduce((total, record) => total + record.guestCount, 0);
-  const vegetarian = records.reduce(
-    (total, record) => total + record.vegetarianCount,
-    0
-  );
-  const noMeal = records.filter((record) => record.noMeal).length;
   const noResponse = records.filter(
     (record) => record.responseStatus === "no_response"
   ).length;
+  const plannedReservationTotal = plannedAttending + guests;
 
   return {
     totalMembers: records.length,
     responded,
     plannedAttending,
-    plannedMealMembers,
     guests,
-    plannedTotalMeals: plannedMealMembers + guests,
-    vegetarian,
-    noMeal,
+    plannedReservationTotal,
     noResponse,
     copyText: [
       `第${eventItem.meetingNo || "-"}次例會出席統計`,
+      "",
       `預計出席社友：${plannedAttending}人`,
       `眷屬／來賓：${guests}人`,
-      `預計用餐：${plannedMealMembers + guests}人`,
-      `素食：${vegetarian}人`,
-      `不用餐：${noMeal}人`,
+      `預計訂桌人數：${plannedReservationTotal}人`,
       `未回覆：${noResponse}人`,
     ].join("\n"),
   };

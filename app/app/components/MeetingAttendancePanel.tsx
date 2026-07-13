@@ -167,11 +167,6 @@ export default function MeetingAttendancePanel({
     const nextRecords = allRows.map((record) => ({
       ...record,
       actualAttendance: record.plannedAttendance,
-      actualMeal: record.plannedMeal && !record.noMeal,
-      mealAmount:
-        record.plannedMeal && !record.noMeal
-          ? record.mealAmount || mealAmount || eventItem.eventMealAmount || 0
-          : 0,
     }));
 
     try {
@@ -213,10 +208,12 @@ export default function MeetingAttendancePanel({
             </p>
           ) : null}
 
-          <div className="grid grid-cols-2 gap-2 text-center text-sm font-bold sm:grid-cols-4">
+          <div className="grid grid-cols-2 gap-2 text-center text-sm font-bold sm:grid-cols-3">
+            <SummaryTile label="社友總數" value={`${summary.totalMembers}人`} />
+            <SummaryTile label="已回覆" value={`${summary.responded}人`} />
             <SummaryTile label="預計出席" value={`${summary.plannedAttending}人`} />
             <SummaryTile label="眷屬／來賓" value={`${summary.guests}人`} />
-            <SummaryTile label="預計用餐" value={`${summary.plannedTotalMeals}人`} />
+            <SummaryTile label="預計訂桌" value={`${summary.plannedReservationTotal}人`} />
             <SummaryTile label="未回覆" value={`${summary.noResponse}人`} />
           </div>
 
@@ -250,7 +247,7 @@ export default function MeetingAttendancePanel({
               >
                 <option value="all">全部</option>
                 <option value="attending">出席</option>
-                <option value="absent">請假</option>
+                <option value="absent">不出席</option>
                 <option value="no_response">未回覆</option>
                 <option value="pending">待確認</option>
               </select>
@@ -263,7 +260,7 @@ export default function MeetingAttendancePanel({
               onClick={() => void handleCopySummary()}
               className={`rounded-2xl bg-[#F7C948] py-3 font-bold ${buttonShadow}`}
             >
-              複製出席統計
+              複製出席摘要
             </button>
             <button
               type="button"
@@ -332,11 +329,6 @@ function AttendanceMemberCard({
 }) {
   function updateRecord(patch: Partial<MeetingAttendance>) {
     const nextRecord = { ...record, ...patch };
-    if (patch.noMeal) {
-      nextRecord.plannedMeal = false;
-      nextRecord.actualMeal = false;
-      nextRecord.mealAmount = 0;
-    }
     if (patch.actualMeal && !nextRecord.mealAmount) {
       nextRecord.mealAmount = eventMealAmount;
     }
@@ -378,7 +370,7 @@ function AttendanceMemberCard({
           >
             <option value="pending">待確認</option>
             <option value="attending">出席</option>
-            <option value="absent">請假</option>
+            <option value="absent">不出席</option>
             <option value="no_response">未回覆</option>
           </select>
         </label>
@@ -387,25 +379,10 @@ function AttendanceMemberCard({
           value={record.guestCount}
           onChange={(value) => updateRecord({ guestCount: value })}
         />
-        <NumberField
-          label="素食"
-          value={record.vegetarianCount}
-          onChange={(value) => updateRecord({ vegetarianCount: value })}
-        />
-        <ToggleField
-          label="不用餐"
-          checked={record.noMeal}
-          onChange={(checked) => updateRecord({ noMeal: checked })}
-        />
         <ToggleField
           label="預計出席"
           checked={record.plannedAttendance}
           onChange={(checked) => updateRecord({ plannedAttendance: checked })}
-        />
-        <ToggleField
-          label="預計用餐"
-          checked={record.plannedMeal}
-          onChange={(checked) => updateRecord({ plannedMeal: checked, noMeal: !checked })}
         />
       </div>
 

@@ -501,7 +501,7 @@ function mapMeetingAttendanceToRow(record: MeetingAttendance) {
     guest_count: record.guestCount,
     vegetarian_count: record.vegetarianCount,
     no_meal: record.noMeal,
-    meal_amount: record.noMeal ? 0 : record.mealAmount,
+    meal_amount: record.mealAmount,
     include_in_dues: record.includeInDues,
     note: record.note,
   };
