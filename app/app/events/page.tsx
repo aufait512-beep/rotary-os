@@ -2,6 +2,7 @@
 
 import Link from "next/link";
 import { FormEvent, useEffect, useMemo, useState } from "react";
+import MeetingAttendancePanel from "@/app/components/MeetingAttendancePanel";
 import {
   defaultEventTimes,
   emptyEventItem,
@@ -133,6 +134,7 @@ export default function EventsPage() {
       sergeantAtArms: eventItem.sergeantAtArms,
       description: eventItem.description,
       note: eventItem.note,
+      eventMealAmount: eventItem.eventMealAmount,
     });
     setEditingId(eventItem.id);
     setExpandedEventId(eventItem.id);
@@ -236,6 +238,22 @@ export default function EventsPage() {
                   />
                 </label>
               ))}
+
+              <label className="block">
+                <span className="text-sm font-bold">本場每人餐費</span>
+                <input
+                  type="number"
+                  min={0}
+                  value={form.eventMealAmount}
+                  onChange={(event) =>
+                    setForm((currentForm) => ({
+                      ...currentForm,
+                      eventMealAmount: Number(event.target.value) || 0,
+                    }))
+                  }
+                  className="mt-2 w-full rounded-2xl border border-[#E5D9BD] bg-white px-4 py-3 text-base text-[#173B73] outline-none transition focus:border-[#173B73] focus:ring-2 focus:ring-[#F7C948]"
+                />
+              </label>
 
               <label className="block">
                 <span className="text-sm font-bold">備註</span>
@@ -343,6 +361,17 @@ export default function EventsPage() {
                       <DetailRow label="糾察長" value="-" />
                       <DetailRow label="活動說明" value={eventItem.note || "-"} />
                       <DetailRow label="備註" value={eventItem.note || "-"} />
+
+                      <MeetingAttendancePanel
+                        eventItem={eventItem}
+                        onEventUpdated={(savedEvent) =>
+                          setEvents((currentEvents) =>
+                            currentEvents.map((currentEvent) =>
+                              currentEvent.id === savedEvent.id ? savedEvent : currentEvent
+                            )
+                          )
+                        }
+                      />
 
                       <div className="mt-5 grid grid-cols-2 gap-3">
                         <button

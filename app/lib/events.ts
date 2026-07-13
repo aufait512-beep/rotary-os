@@ -17,6 +17,7 @@ export type EventItem = {
   sergeantAtArms: string;
   description: string;
   note: string;
+  eventMealAmount: number;
 };
 
 export const EVENTS_STORAGE_KEY = "rotary-os-events";
@@ -39,6 +40,7 @@ export const emptyEventItem: Omit<EventItem, "id"> = {
   sergeantAtArms: "",
   description: "",
   note: "",
+  eventMealAmount: 0,
 };
 
 export const defaultEventTimes = {

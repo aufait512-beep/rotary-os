@@ -1,4 +1,5 @@
 import { supabase } from "@/src/lib/supabase";
+import { MeetingAttendance } from "@/lib/attendance";
 import { DuesLineItem, DuesRecord, PaymentMethod } from "@/lib/dues";
 import { EventItem, RotaryYear } from "@/lib/events";
 import { Member, normalizeMember, sortMembersByName } from "@/lib/members";
@@ -184,6 +185,40 @@ export async function deleteDuesRecord(recordId: string) {
   if (error) throw error;
 }
 
+export async function fetchMeetingAttendance(eventId?: string) {
+  let query = supabase.from("meeting_attendance").select("*");
+  if (eventId) {
+    query = query.eq("event_id", eventId);
+  }
+
+  const { data, error } = await query.order("created_at", { ascending: true });
+  if (error) throw error;
+  return (data ?? []).map(mapMeetingAttendanceFromRow);
+}
+
+export async function upsertMeetingAttendance(record: MeetingAttendance) {
+  const { data, error } = await supabase
+    .from("meeting_attendance")
+    .upsert(mapMeetingAttendanceToRow(record), {
+      onConflict: "event_id,member_id",
+    })
+    .select()
+    .single();
+  if (error) throw error;
+  return mapMeetingAttendanceFromRow(data);
+}
+
+export async function insertDuesLineItems(lineItems: DuesLineItem[]) {
+  if (lineItems.length === 0) return [];
+
+  const { data, error } = await supabase
+    .from("dues_line_items")
+    .insert(lineItems.map(mapDuesLineItemToRow))
+    .select();
+  if (error) throw error;
+  return (data ?? []).map(mapDuesLineItemFromRow);
+}
+
 function mapRotaryYearFromRow(row: DbRecord): RotaryYear {
   return {
     id: text(row.id),
@@ -290,6 +325,7 @@ function mapEventFromRow(row: DbRecord): EventItem {
     sergeantAtArms: text(row.sergeant_at_arms),
     description: text(row.description),
     note: text(row.note),
+    eventMealAmount: number(row.event_meal_amount),
   };
 }
 
@@ -313,6 +349,7 @@ function mapEventToRow(eventItem: EventItem) {
     sergeant_at_arms: eventItem.sergeantAtArms,
     description: eventItem.description,
     note: eventItem.note,
+    event_meal_amount: eventItem.eventMealAmount,
   };
 }
 
@@ -430,6 +467,46 @@ function mapDuesLineItemToRow(item: DuesLineItem) {
   };
 }
 
+function mapMeetingAttendanceFromRow(row: DbRecord): MeetingAttendance {
+  return {
+    id: text(row.id),
+    eventId: text(row.event_id),
+    memberId: text(row.member_id),
+    responseStatus: normalizeAttendanceStatus(text(row.response_status)),
+    plannedAttendance: Boolean(row.planned_attendance),
+    actualAttendance: Boolean(row.actual_attendance),
+    plannedMeal: Boolean(row.planned_meal),
+    actualMeal: Boolean(row.actual_meal),
+    guestCount: number(row.guest_count),
+    vegetarianCount: number(row.vegetarian_count),
+    noMeal: Boolean(row.no_meal),
+    mealAmount: number(row.meal_amount),
+    includeInDues: row.include_in_dues !== false,
+    note: text(row.note),
+    createdAt: text(row.created_at) || new Date().toISOString(),
+    updatedAt: text(row.updated_at) || new Date().toISOString(),
+  };
+}
+
+function mapMeetingAttendanceToRow(record: MeetingAttendance) {
+  return {
+    ...(record.id ? { id: record.id } : {}),
+    event_id: record.eventId,
+    member_id: record.memberId,
+    response_status: record.responseStatus,
+    planned_attendance: record.plannedAttendance,
+    actual_attendance: record.actualAttendance,
+    planned_meal: record.plannedMeal,
+    actual_meal: record.actualMeal,
+    guest_count: record.guestCount,
+    vegetarian_count: record.vegetarianCount,
+    no_meal: record.noMeal,
+    meal_amount: record.noMeal ? 0 : record.mealAmount,
+    include_in_dues: record.includeInDues,
+    note: record.note,
+  };
+}
+
 function normalizePaymentMethod(value: string): PaymentMethod {
   if (value === "現金" || value === "轉帳" || value === "信用卡扣") {
     return value;
@@ -451,6 +528,19 @@ function normalizeLineItemType(value: string): DuesLineItem["itemType"] {
   }
 
   return "pass_through";
+}
+
+function normalizeAttendanceStatus(value: string): MeetingAttendance["responseStatus"] {
+  if (
+    value === "pending" ||
+    value === "attending" ||
+    value === "absent" ||
+    value === "no_response"
+  ) {
+    return value;
+  }
+
+  return "pending";
 }
 
 function sumLineItems(lineItems: DuesLineItem[]) {

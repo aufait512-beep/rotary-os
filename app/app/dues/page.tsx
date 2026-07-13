@@ -3,6 +3,7 @@
 
 import Link from "next/link";
 import { FormEvent, useEffect, useMemo, useState } from "react";
+import { MeetingAttendance } from "@/lib/attendance";
 import {
   DuesLineItem,
   DuesRecord,
@@ -12,16 +13,29 @@ import {
   PaymentMethod,
   sortDuesRecords,
 } from "@/lib/dues";
+import { EventItem } from "@/lib/events";
 import { formatMemberName, Member, sortMembersByName } from "@/lib/members";
 import {
   deleteDuesRecord,
   fetchDuesRecords,
+  fetchEvents,
+  fetchMeetingAttendance,
   fetchMembers,
+  insertDuesLineItems,
   upsertDuesRecord,
 } from "@/lib/supabaseData";
 
 type DuesFormState = Omit<DuesRecord, "id" | "createdAt">;
 type NumericDuesField = "previousBalance" | "paidAmount";
+
+type MealImportRow = {
+  key: string;
+  member: Member;
+  eventItem: EventItem;
+  attendance: MeetingAttendance;
+  duesRecord?: DuesRecord;
+  alreadyImported: boolean;
+};
 
 const buttonShadow =
   "shadow-[6px_6px_12px_rgba(0,0,0,0.18),-4px_-4px_10px_rgba(255,255,255,0.85)] active:translate-y-1 active:shadow-inner";
@@ -40,6 +54,13 @@ export default function DuesPage() {
   const [expandedRecordId, setExpandedRecordId] = useState("");
   const [previewRecordId, setPreviewRecordId] = useState("");
   const [exportingId, setExportingId] = useState("");
+  const [mealMonth, setMealMonth] = useState(getCurrentMonth());
+  const [mealRows, setMealRows] = useState<MealImportRow[]>([]);
+  const [selectedMealKeys, setSelectedMealKeys] = useState<string[]>([]);
+  const [editedMealAmounts, setEditedMealAmounts] = useState<Record<string, number>>({});
+  const [mealImportMessage, setMealImportMessage] = useState("");
+  const [isLoadingMeals, setIsLoadingMeals] = useState(false);
+  const [isImportingMeals, setIsImportingMeals] = useState(false);
 
   const sortedMembers = useMemo(() => sortMembersByName(members), [members]);
   const filteredRecords = useMemo(() => {
@@ -236,6 +257,125 @@ export default function DuesPage() {
       setExportingId("");
     }
   }
+
+  async function loadMonthlyMealRows() {
+    if (!mealMonth) {
+      setErrorMessage("請先選擇月份。");
+      return;
+    }
+
+    try {
+      setErrorMessage("");
+      setMealImportMessage("");
+      setIsLoadingMeals(true);
+      const [
+        loadedMembers,
+        loadedEvents,
+        loadedAttendance,
+        loadedRecords,
+      ] = await Promise.all([
+        fetchMembers(),
+        fetchEvents(),
+        fetchMeetingAttendance(),
+        fetchDuesRecords(),
+      ]);
+      setMembers(loadedMembers);
+      setRecords(loadedRecords);
+
+      const rows = buildMealImportRows({
+        month: mealMonth,
+        members: loadedMembers,
+        events: loadedEvents,
+        attendanceRecords: loadedAttendance,
+        duesRecords: loadedRecords,
+      });
+      setMealRows(rows);
+      setSelectedMealKeys(
+        rows
+          .filter((row) => row.duesRecord && !row.alreadyImported)
+          .map((row) => row.key)
+      );
+      setEditedMealAmounts(
+        Object.fromEntries(rows.map((row) => [row.key, row.attendance.mealAmount]))
+      );
+      setMealImportMessage(`已載入 ${rows.length} 筆本月例會餐費資料。`);
+    } catch (error) {
+      setErrorMessage(getErrorMessage(error, "本月餐費資料讀取失敗"));
+    } finally {
+      setIsLoadingMeals(false);
+    }
+  }
+
+  async function importMonthlyMealRows() {
+    const rowsToImport = mealRows.filter((row) => selectedMealKeys.includes(row.key));
+    if (rowsToImport.length === 0) {
+      setMealImportMessage("尚未勾選可帶入的餐費資料。");
+      return;
+    }
+
+    const lineItems: DuesLineItem[] = [];
+    let skipped = 0;
+
+    rowsToImport.forEach((row) => {
+      if (!row.duesRecord || row.alreadyImported) {
+        skipped += 1;
+        return;
+      }
+
+      const amount = Math.max(0, editedMealAmounts[row.key] ?? row.attendance.mealAmount);
+      const note = buildMealLineItemNote(row.eventItem);
+      const duplicate = row.duesRecord.lineItems.some(
+        (item) =>
+          item.itemType === "meal" &&
+          item.serviceDate === row.eventItem.date &&
+          item.note === note
+      );
+
+      if (duplicate) {
+        skipped += 1;
+        return;
+      }
+
+      lineItems.push({
+        id: crypto.randomUUID(),
+        duesRecordId: row.duesRecord.id,
+        itemType: "meal",
+        itemName: "例會餐費",
+        serviceDate: row.eventItem.date,
+        quantity: 1,
+        unitAmount: amount,
+        amount,
+        note,
+        createdAt: new Date().toISOString(),
+      });
+    });
+
+    if (lineItems.length === 0) {
+      setMealImportMessage(`沒有可帶入的餐費資料，已略過 ${skipped} 筆。`);
+      return;
+    }
+
+    const confirmed = window.confirm(
+      `確定要帶入 ${lineItems.length} 筆本月例會餐費到社費明細嗎？`
+    );
+    if (!confirmed) return;
+
+    try {
+      setErrorMessage("");
+      setIsImportingMeals(true);
+      await insertDuesLineItems(lineItems);
+      await loadData();
+      setMealImportMessage(
+        `餐費帶入完成：新增 ${lineItems.length} 筆，略過 ${skipped} 筆。`
+      );
+      await loadMonthlyMealRows();
+    } catch (error) {
+      setErrorMessage(getErrorMessage(error, "本月餐費帶入失敗"));
+    } finally {
+      setIsImportingMeals(false);
+    }
+  }
+
   return (
     <main className="min-h-screen bg-[#F8F3E8] px-4 py-6 text-[#173B73]">
       <section className="mx-auto max-w-md space-y-6">
@@ -427,6 +567,150 @@ export default function DuesPage() {
             <p className="text-sm font-bold text-[#C99700]">未繳總額</p>
             <p className="mt-1 text-3xl font-bold">{formatCurrency(totalUnpaid)}</p>
           </div>
+        </section>
+
+        <section className="space-y-4 rounded-3xl bg-white/85 p-5 shadow-[8px_8px_20px_rgba(0,0,0,0.12),-8px_-8px_20px_rgba(255,255,255,0.9)]">
+          <div>
+            <p className="text-sm font-bold text-[#C99700]">例會餐費串接</p>
+            <h2 className="mt-1 text-2xl font-bold">本月餐費帶入社費</h2>
+          </div>
+          <div className="grid grid-cols-1 gap-3 sm:grid-cols-[1fr_auto]">
+            <label className="block">
+              <span className="text-sm font-bold">選擇月份</span>
+              <input
+                type="month"
+                value={mealMonth}
+                onChange={(event) => setMealMonth(event.target.value)}
+                className="mt-2 w-full rounded-2xl border border-[#E5D9BD] bg-white px-4 py-3 outline-none focus:border-[#173B73] focus:ring-2 focus:ring-[#F7C948]"
+              />
+            </label>
+            <button
+              type="button"
+              onClick={() => void loadMonthlyMealRows()}
+              disabled={isLoadingMeals}
+              className={`self-end rounded-2xl bg-[#F7C948] px-5 py-3 font-bold disabled:opacity-60 ${buttonShadow}`}
+            >
+              {isLoadingMeals ? "讀取中" : "產生本月餐費預覽"}
+            </button>
+          </div>
+
+          {mealImportMessage ? (
+            <p className="rounded-2xl bg-[#F8F3E8] p-3 text-sm font-bold">
+              {mealImportMessage}
+            </p>
+          ) : null}
+
+          {mealRows.length > 0 ? (
+            <div className="space-y-3">
+              <div className="grid grid-cols-2 gap-3 text-center text-sm font-bold">
+                <div className="rounded-2xl bg-[#F8F3E8] p-3">
+                  <p className="text-[#173B73]/70">可帶入筆數</p>
+                  <p className="mt-1 text-xl">{selectedMealKeys.length}</p>
+                </div>
+                <div className="rounded-2xl bg-[#F8F3E8] p-3">
+                  <p className="text-[#173B73]/70">預計帶入總額</p>
+                  <p className="mt-1 text-xl">
+                    {formatCurrency(
+                      mealRows
+                        .filter((row) => selectedMealKeys.includes(row.key))
+                        .reduce(
+                          (total, row) =>
+                            total +
+                            Math.max(0, editedMealAmounts[row.key] ?? row.attendance.mealAmount),
+                          0
+                        )
+                    )}
+                  </p>
+                </div>
+              </div>
+
+              {mealRows.map((row) => {
+                const selected = selectedMealKeys.includes(row.key);
+                const disabled = !row.duesRecord || row.alreadyImported;
+
+                return (
+                  <article key={row.key} className="rounded-3xl border border-[#E5D9BD] bg-white p-4">
+                    <div className="flex flex-wrap items-start justify-between gap-3">
+                      <label className="flex min-w-0 items-start gap-3">
+                        <input
+                          type="checkbox"
+                          checked={selected}
+                          disabled={disabled}
+                          onChange={(event) =>
+                            setSelectedMealKeys((currentKeys) =>
+                              event.target.checked
+                                ? [...currentKeys, row.key]
+                                : currentKeys.filter((key) => key !== row.key)
+                            )
+                          }
+                          className="mt-1 h-5 w-5"
+                        />
+                        <span className="min-w-0">
+                          <span className="block break-words text-base font-bold">
+                            {formatMemberName(row.member)}
+                          </span>
+                          <span className="mt-1 block break-words text-sm font-semibold text-[#173B73]/75">
+                            {formatDate(row.eventItem.date)}｜第{row.eventItem.meetingNo || "-"}次例會｜{row.eventItem.title || "例會"}
+                          </span>
+                        </span>
+                      </label>
+                      <span
+                        className={`shrink-0 rounded-full px-3 py-1 text-xs font-bold ${
+                          row.alreadyImported
+                            ? "bg-[#173B73] text-white"
+                            : row.duesRecord
+                              ? "bg-[#F7C948] text-[#173B73]"
+                              : "bg-[#F47C6C] text-white"
+                        }`}
+                      >
+                        {row.alreadyImported
+                          ? "已帶入"
+                          : row.duesRecord
+                            ? "可帶入"
+                            : "尚無社費紀錄"}
+                      </span>
+                    </div>
+                    <div className="mt-3 grid grid-cols-1 gap-3 sm:grid-cols-2">
+                      <label className="block">
+                        <span className="text-sm font-bold">該場餐費</span>
+                        <input
+                          type="number"
+                          min={0}
+                          value={editedMealAmounts[row.key] ?? row.attendance.mealAmount}
+                          onChange={(event) =>
+                            setEditedMealAmounts((currentAmounts) => ({
+                              ...currentAmounts,
+                              [row.key]: Number(event.target.value) || 0,
+                            }))
+                          }
+                          disabled={disabled}
+                          className="mt-2 w-full rounded-2xl border border-[#E5D9BD] px-3 py-3 disabled:bg-[#F8F3E8]"
+                        />
+                      </label>
+                      <div className="rounded-2xl bg-[#F8F3E8] p-3 text-sm font-bold">
+                        <p>用餐：{row.attendance.actualMeal ? "是" : "否"}</p>
+                        <p>帶入社費：{row.attendance.includeInDues ? "是" : "否"}</p>
+                        {!row.duesRecord ? (
+                          <p className="mt-1 text-[#F47C6C]">
+                            該社友尚未建立此月份社費紀錄
+                          </p>
+                        ) : null}
+                      </div>
+                    </div>
+                  </article>
+                );
+              })}
+
+              <button
+                type="button"
+                onClick={() => void importMonthlyMealRows()}
+                disabled={isImportingMeals}
+                className={`w-full rounded-2xl bg-[#173B73] py-4 font-bold text-white disabled:opacity-60 ${buttonShadow}`}
+              >
+                {isImportingMeals ? "帶入中" : "帶入本月社費"}
+              </button>
+            </div>
+          ) : null}
         </section>
 
         <section className="space-y-3">
@@ -761,6 +1045,76 @@ function SmallAction({ children, onClick }: { children: string; onClick: () => v
   );
 }
 
+function buildMealImportRows({
+  month,
+  members,
+  events,
+  attendanceRecords,
+  duesRecords,
+}: {
+  month: string;
+  members: Member[];
+  events: EventItem[];
+  attendanceRecords: MeetingAttendance[];
+  duesRecords: DuesRecord[];
+}): MealImportRow[] {
+  const eventMap = new Map(events.map((eventItem) => [eventItem.id, eventItem]));
+  const memberMap = new Map(members.map((member) => [member.id, member]));
+  const rows: MealImportRow[] = [];
+
+  attendanceRecords.forEach((attendance) => {
+    const eventItem = eventMap.get(attendance.eventId);
+    const member = memberMap.get(attendance.memberId);
+    if (
+      !eventItem ||
+      !member ||
+      !attendance.actualMeal ||
+      !attendance.includeInDues ||
+      !eventItem.date.startsWith(month)
+    ) {
+      return;
+    }
+
+    const duesRecord = duesRecords.find(
+      (record) =>
+        record.memberId === attendance.memberId && record.periodMonth === month
+    );
+    const note = buildMealLineItemNote(eventItem);
+    const alreadyImported =
+      duesRecord?.lineItems.some(
+        (item) =>
+          item.itemType === "meal" &&
+          item.serviceDate === eventItem.date &&
+          item.note === note
+      ) ?? false;
+
+    rows.push({
+      key: `${attendance.eventId}-${attendance.memberId}`,
+      member,
+      eventItem,
+      attendance,
+      duesRecord,
+      alreadyImported,
+    });
+  });
+
+  return rows.sort((firstRow, secondRow) =>
+      `${firstRow.eventItem.date}-${formatMemberName(firstRow.member)}`.localeCompare(
+        `${secondRow.eventItem.date}-${formatMemberName(secondRow.member)}`,
+        "zh-Hant"
+      )
+    );
+}
+
+function buildMealLineItemNote(eventItem: EventItem) {
+  return `第${eventItem.meetingNo || "-"}次例會／${eventItem.title || "例會"}`;
+}
+
+function getCurrentMonth() {
+  const now = new Date();
+  return `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, "0")}`;
+}
+
 function getCurrentDue(record: Pick<DuesRecord, "currentDue" | "lineItems">) {
   if (record.lineItems.length === 0) return record.currentDue;
   return record.lineItems.reduce((total, item) => total + item.amount, 0);
@@ -849,6 +1203,10 @@ function formatStatementMonth(periodMonth: string) {
   if (!periodMonth) return "未填月份";
   const [year, month] = periodMonth.split("-");
   return `${year} 年 ${Number(month)} 月`;
+}
+
+function formatDate(dateValue: string) {
+  return dateValue ? dateValue.replaceAll("-", "/") : "未填日期";
 }
 
 function formatTaiwanDate(date: Date) {

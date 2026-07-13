@@ -612,6 +612,7 @@ function programToEventFallback(program: ProgramFormState): EventItem {
     sergeantAtArms: program.sergeantAtArms,
     description: "",
     note: "",
+    eventMealAmount: 0,
   };
 }
 

@@ -2,6 +2,7 @@
 
 import Link from "next/link";
 import { FormEvent, useEffect, useMemo, useState } from "react";
+import MeetingAttendancePanel from "@/app/components/MeetingAttendancePanel";
 import { EventItem, RotaryYear, sortEventsByDate } from "@/lib/events";
 import {
   deleteRotaryYear,
@@ -513,6 +514,18 @@ export default function CalendarPage() {
                             <DetailRow label="糾察長" value="-" />
                             <DetailRow label="活動說明" value={eventItem.note || "-"} />
                             <DetailRow label="備註" value={eventItem.note || "-"} />
+                            <MeetingAttendancePanel
+                              eventItem={eventItem}
+                              onEventUpdated={(savedEvent) =>
+                                setEvents((currentEvents) =>
+                                  currentEvents.map((currentEvent) =>
+                                    currentEvent.id === savedEvent.id
+                                      ? savedEvent
+                                      : currentEvent
+                                  )
+                                )
+                              }
+                            />
                             <div className="grid grid-cols-2 gap-3 pt-3">
                               <Link
                                 href="/events"
