@@ -2,6 +2,7 @@ import { supabase } from "@/src/lib/supabase";
 import { MeetingAttendance } from "@/lib/attendance";
 import { DuesLineItem, DuesRecord, PaymentMethod } from "@/lib/dues";
 import { EventItem, RotaryYear } from "@/lib/events";
+import { MemberLeavePeriod } from "@/lib/memberLeave";
 import { Member, normalizeMember, sortMembersByName } from "@/lib/members";
 import { ProgramItem } from "@/lib/programs";
 
@@ -39,6 +40,30 @@ export async function insertMember(member: Member) {
 export async function deleteMember(memberId: string) {
   const { error } = await supabase.from("members").delete().eq("id", memberId);
   if (error) throw error;
+}
+
+export async function fetchMemberLeavePeriods(memberId?: string) {
+  let query = supabase
+    .from("member_leave_periods")
+    .select("*")
+    .order("start_date", { ascending: false });
+  if (memberId) {
+    query = query.eq("member_id", memberId);
+  }
+
+  const { data, error } = await query;
+  if (error) throw error;
+  return (data ?? []).map(mapMemberLeavePeriodFromRow);
+}
+
+export async function upsertMemberLeavePeriod(period: MemberLeavePeriod) {
+  const { data, error } = await supabase
+    .from("member_leave_periods")
+    .upsert(mapMemberLeavePeriodToRow(period), { onConflict: "id" })
+    .select()
+    .single();
+  if (error) throw error;
+  return mapMemberLeavePeriodFromRow(data);
 }
 
 export async function fetchEvents() {
@@ -302,6 +327,37 @@ function mapMemberFieldsToRow(member: Member) {
     ri_no: member.riNo,
     status: member.status,
     note: member.note,
+  };
+}
+
+function mapMemberLeavePeriodFromRow(row: DbRecord): MemberLeavePeriod {
+  return {
+    id: text(row.id),
+    memberId: text(row.member_id),
+    startDate: text(row.start_date),
+    endDate: text(row.end_date),
+    reason: text(row.reason),
+    annualFeeAmount:
+      row.annual_fee_amount === null || row.annual_fee_amount === undefined
+        ? 1000
+        : number(row.annual_fee_amount),
+    isActive: Boolean(row.is_active),
+    note: text(row.note),
+    createdAt: text(row.created_at) || new Date().toISOString(),
+    updatedAt: text(row.updated_at) || new Date().toISOString(),
+  };
+}
+
+function mapMemberLeavePeriodToRow(period: MemberLeavePeriod) {
+  return {
+    ...(period.id ? { id: period.id } : {}),
+    member_id: period.memberId,
+    start_date: emptyToNull(period.startDate),
+    end_date: emptyToNull(period.endDate),
+    reason: period.reason,
+    annual_fee_amount: period.annualFeeAmount,
+    is_active: period.isActive,
+    note: period.note,
   };
 }
 

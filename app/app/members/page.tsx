@@ -11,14 +11,24 @@ import {
   sortMembersByName,
 } from "@/lib/members";
 import {
+  emptyMemberLeavePeriod,
+  getMemberLeaveLabel,
+  isMemberOnLeave,
+  MemberLeavePeriod,
+} from "@/lib/memberLeave";
+import {
   deleteMember,
+  fetchMemberLeavePeriods,
   fetchMembers,
   insertMember,
+  upsertMemberLeavePeriod,
   upsertMember,
 } from "@/lib/supabaseData";
 
 type MemberFormState = Omit<Member, "id" | "createdAt">;
 type MemberField = keyof MemberFormState;
+type LeaveFormState = Omit<MemberLeavePeriod, "id" | "memberId" | "createdAt" | "updatedAt">;
+type LeaveFilter = "all" | "normal" | "on_leave";
 
 const buttonShadow =
   "shadow-[6px_6px_12px_rgba(0,0,0,0.18),-4px_-4px_10px_rgba(255,255,255,0.85)] active:translate-y-1 active:shadow-inner";
@@ -78,9 +88,12 @@ const detailFields: { label: string; value: (member: Member) => string }[] = [
 
 export default function MembersPage() {
   const [members, setMembers] = useState<Member[]>([]);
+  const [leavePeriods, setLeavePeriods] = useState<MemberLeavePeriod[]>([]);
   const [form, setForm] = useState<MemberFormState>(emptyMember);
   const [editingId, setEditingId] = useState<string | null>(null);
   const [searchTerm, setSearchTerm] = useState("");
+  const [leaveFilter, setLeaveFilter] = useState<LeaveFilter>("all");
+  const [expandedLeaveMemberId, setExpandedLeaveMemberId] = useState("");
   const [importMessage, setImportMessage] = useState("");
   const [selectedMember, setSelectedMember] = useState<Member | null>(null);
   const [isFormOpen, setIsFormOpen] = useState(false);
@@ -104,6 +117,17 @@ export default function MembersPage() {
       ),
     [currentMonth, members]
   );
+  const today = getTodayDate();
+  const leaveStats = useMemo(() => {
+    const onLeaveCount = members.filter(
+      (member) => isMemberOnLeave(member.id, today, leavePeriods).isOnLeave
+    ).length;
+    return {
+      total: members.length,
+      onLeave: onLeaveCount,
+      normal: members.length - onLeaveCount,
+    };
+  }, [leavePeriods, members, today]);
   const filteredMembers = useMemo(() => {
     const keyword = searchTerm.trim().toLowerCase();
     const sortedMembers = sortMembersByName(members);
@@ -112,8 +136,12 @@ export default function MembersPage() {
       return sortedMembers;
     }
 
-    return sortedMembers.filter((member) =>
-      [
+    return sortedMembers.filter((member) => {
+      const isOnLeave = isMemberOnLeave(member.id, today, leavePeriods).isOnLeave;
+      if (leaveFilter === "normal" && isOnLeave) return false;
+      if (leaveFilter === "on_leave" && !isOnLeave) return false;
+
+      return [
         member.rotaryName,
         member.chineseName,
         member.englishName,
@@ -122,14 +150,19 @@ export default function MembersPage() {
       ]
         .join(" ")
         .toLowerCase()
-        .includes(keyword)
-    );
-  }, [members, searchTerm]);
+        .includes(keyword);
+    });
+  }, [leaveFilter, leavePeriods, members, searchTerm, today]);
 
   async function loadMembers() {
     try {
       setErrorMessage("");
-      setMembers(await fetchMembers());
+      const [loadedMembers, loadedLeavePeriods] = await Promise.all([
+        fetchMembers(),
+        fetchMemberLeavePeriods(),
+      ]);
+      setMembers(loadedMembers);
+      setLeavePeriods(loadedLeavePeriods);
     } catch (error) {
       setErrorMessage(getErrorMessage(error, "社友資料讀取失敗"));
     }
@@ -286,6 +319,17 @@ export default function MembersPage() {
     } finally {
       event.target.value = "";
     }
+  }
+
+  function handleLeaveSaved(savedPeriod: MemberLeavePeriod) {
+    setLeavePeriods((currentPeriods) => {
+      const exists = currentPeriods.some((period) => period.id === savedPeriod.id);
+      return exists
+        ? currentPeriods.map((period) =>
+            period.id === savedPeriod.id ? savedPeriod : period
+          )
+        : [savedPeriod, ...currentPeriods];
+    });
   }
 
   function exportCsv() {
@@ -494,37 +538,100 @@ export default function MembersPage() {
             className="w-full rounded-2xl border border-[#E5D9BD] bg-white px-4 py-3 outline-none focus:border-[#173B73] focus:ring-2 focus:ring-[#F7C948]"
           />
 
+          <div className="grid grid-cols-3 gap-2 text-center text-sm font-bold">
+            <StatTile label="社友總數" value={leaveStats.total} />
+            <StatTile label="長假人數" value={leaveStats.onLeave} />
+            <StatTile label="正常人數" value={leaveStats.normal} />
+          </div>
+          <div className="grid grid-cols-3 gap-2">
+            {(
+              [
+                ["all", "全部"],
+                ["normal", "正常"],
+                ["on_leave", "請長假"],
+              ] as [LeaveFilter, string][]
+            ).map(([value, label]) => (
+              <button
+                key={value}
+                type="button"
+                onClick={() => setLeaveFilter(value)}
+                className={`rounded-2xl py-3 text-sm font-bold ${buttonShadow} ${
+                  leaveFilter === value ? "bg-[#F7C948]" : "bg-white"
+                }`}
+              >
+                {label}
+              </button>
+            ))}
+          </div>
+
           {filteredMembers.length === 0 ? (
             <div className="rounded-3xl bg-white/75 p-5 text-center font-semibold text-[#173B73]/70 shadow-[6px_6px_16px_rgba(0,0,0,0.1),-6px_-6px_16px_rgba(255,255,255,0.8)]">
               目前沒有符合條件的社友。
             </div>
           ) : (
-            filteredMembers.map((member) => (
-              <button
-                type="button"
-                key={member.id}
-                onClick={() => setSelectedMember(member)}
-                className="block w-full rounded-3xl bg-white/85 p-5 text-left shadow-[8px_8px_20px_rgba(0,0,0,0.12),-8px_-8px_20px_rgba(255,255,255,0.9)]"
-              >
-                <div className="flex items-start justify-between gap-3">
-                  <div>
-                    <h3 className="mt-1 text-xl font-bold">
-                      {formatMemberName(member) || "未命名社友"}
-                    </h3>
-                    <p className="text-sm font-semibold text-[#173B73]/70">
-                      {member.title || "-"}
-                    </p>
-                  </div>
-                  <span className="rounded-full bg-[#173B73] px-3 py-1 text-xs font-bold text-white">
-                    {formatStatus(member.status)}
-                  </span>
-                </div>
-                <div className="mt-4 grid grid-cols-2 gap-2 text-sm font-semibold text-[#173B73]/80">
-                  <p>行動電話：{member.mobile || "-"}</p>
-                  <p>生日月份：{member.birthdayMonth || "-"}</p>
-                </div>
-              </button>
-            ))
+            filteredMembers.map((member) => {
+              const leaveStatus = isMemberOnLeave(member.id, today, leavePeriods);
+              const leaveLabel = getMemberLeaveLabel(member.id, today, leavePeriods);
+              const isLeaveOpen = expandedLeaveMemberId === member.id;
+
+              return (
+                <article
+                  key={member.id}
+                  className="rounded-3xl bg-white/85 p-5 shadow-[8px_8px_20px_rgba(0,0,0,0.12),-8px_-8px_20px_rgba(255,255,255,0.9)]"
+                >
+                  <button
+                    type="button"
+                    onClick={() => setSelectedMember(member)}
+                    className="block w-full text-left"
+                  >
+                    <div className="flex items-start justify-between gap-3">
+                      <div>
+                        <h3 className="mt-1 text-xl font-bold">
+                          {formatMemberName(member) || "未命名社友"}
+                        </h3>
+                        <p className="text-sm font-semibold text-[#173B73]/70">
+                          {member.title || "-"}
+                        </p>
+                      </div>
+                      <div className="flex shrink-0 flex-col items-end gap-2">
+                        <span className="rounded-full bg-[#173B73] px-3 py-1 text-xs font-bold text-white">
+                          {formatStatus(member.status)}
+                        </span>
+                        <span
+                          className={`rounded-full px-3 py-1 text-xs font-bold text-white ${
+                            leaveStatus.isOnLeave ? "bg-[#F47C6C]" : "bg-[#173B73]/70"
+                          }`}
+                        >
+                          {leaveLabel}
+                        </span>
+                      </div>
+                    </div>
+                    <div className="mt-4 grid grid-cols-2 gap-2 text-sm font-semibold text-[#173B73]/80">
+                      <p>行動電話：{member.mobile || "-"}</p>
+                      <p>生日月份：{member.birthdayMonth || "-"}</p>
+                    </div>
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() =>
+                      setExpandedLeaveMemberId((currentId) =>
+                        currentId === member.id ? "" : member.id
+                      )
+                    }
+                    className={`mt-4 w-full rounded-2xl bg-[#F7C948] py-3 text-sm font-bold ${buttonShadow}`}
+                  >
+                    {isLeaveOpen ? "收合長假管理" : "長假管理"}
+                  </button>
+                  {isLeaveOpen ? (
+                    <MemberLeavePanel
+                      member={member}
+                      periods={leavePeriods.filter((period) => period.memberId === member.id)}
+                      onSaved={handleLeaveSaved}
+                    />
+                  ) : null}
+                </article>
+              );
+            })
           )}
         </section>
       </section>
@@ -562,6 +669,282 @@ function MonthPanel({ title, members }: { title: string; members: Member[] }) {
         </div>
       )}
     </div>
+  );
+}
+
+function StatTile({ label, value }: { label: string; value: number }) {
+  return (
+    <div className="rounded-2xl bg-white/80 p-3">
+      <p className="text-xs text-[#173B73]/70">{label}</p>
+      <p className="mt-1 text-xl font-bold">{value}</p>
+    </div>
+  );
+}
+
+function MemberLeavePanel({
+  member,
+  periods,
+  onSaved,
+}: {
+  member: Member;
+  periods: MemberLeavePeriod[];
+  onSaved: (period: MemberLeavePeriod) => void;
+}) {
+  const [form, setForm] = useState<LeaveFormState>(emptyMemberLeavePeriod);
+  const [editingId, setEditingId] = useState("");
+  const [message, setMessage] = useState("");
+  const [errorMessage, setErrorMessage] = useState("");
+  const sortedPeriods = [...periods].sort((firstPeriod, secondPeriod) =>
+    secondPeriod.startDate.localeCompare(firstPeriod.startDate)
+  );
+  const currentLeave = isMemberOnLeave(member.id, getTodayDate(), periods).leavePeriod;
+
+  function resetLeaveForm() {
+    setForm(emptyMemberLeavePeriod);
+    setEditingId("");
+  }
+
+  function editPeriod(period: MemberLeavePeriod) {
+    setEditingId(period.id);
+    setForm({
+      startDate: period.startDate,
+      endDate: period.endDate,
+      reason: period.reason,
+      annualFeeAmount: period.annualFeeAmount,
+      isActive: period.isActive,
+      note: period.note,
+    });
+  }
+
+  async function saveLeavePeriod(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+    setErrorMessage("");
+    setMessage("");
+
+    if (form.endDate && form.endDate < form.startDate) {
+      setErrorMessage("結束日期不可早於開始日期。");
+      return;
+    }
+
+    try {
+      const currentPeriod = periods.find((period) => period.id === editingId);
+      const savedPeriod = await upsertMemberLeavePeriod({
+        ...form,
+        id: editingId,
+        memberId: member.id,
+        createdAt: currentPeriod?.createdAt ?? new Date().toISOString(),
+        updatedAt: currentPeriod?.updatedAt ?? new Date().toISOString(),
+      });
+      onSaved(savedPeriod);
+      setMessage(editingId ? "長假紀錄已更新。" : "已新增長假紀錄。");
+      resetLeaveForm();
+    } catch (error) {
+      setErrorMessage(getErrorMessage(error, "長假紀錄儲存失敗"));
+    }
+  }
+
+  async function patchPeriod(period: MemberLeavePeriod, patch: Partial<MemberLeavePeriod>) {
+    try {
+      setErrorMessage("");
+      setMessage("");
+      const savedPeriod = await upsertMemberLeavePeriod({
+        ...period,
+        ...patch,
+        updatedAt: new Date().toISOString(),
+      });
+      onSaved(savedPeriod);
+      setMessage("長假紀錄已更新。");
+    } catch (error) {
+      setErrorMessage(getErrorMessage(error, "長假紀錄更新失敗"));
+    }
+  }
+
+  return (
+    <section className="mt-4 space-y-4 rounded-3xl bg-[#F8F3E8] p-4">
+      {currentLeave ? (
+        <div className="rounded-2xl bg-white p-4 text-sm font-bold">
+          <div className="mb-2 inline-flex rounded-full bg-[#F47C6C] px-3 py-1 text-xs text-white">
+            請長假
+          </div>
+          <p>開始日期：{currentLeave.startDate}</p>
+          <p>結束日期：{currentLeave.endDate || "未定"}</p>
+          <p>原因：{currentLeave.reason || "-"}</p>
+          <p>常年費：{formatCurrency(currentLeave.annualFeeAmount || 1000)}</p>
+          <p>備註：{currentLeave.note || "-"}</p>
+        </div>
+      ) : null}
+
+      {message ? (
+        <p className="rounded-2xl border border-green-200 bg-green-50 p-3 text-sm font-bold text-green-700">
+          {message}
+        </p>
+      ) : null}
+      {errorMessage ? (
+        <p className="rounded-2xl border border-red-200 bg-red-50 p-3 text-sm font-bold text-red-700">
+          {errorMessage}
+        </p>
+      ) : null}
+
+      <form onSubmit={saveLeavePeriod} className="space-y-3">
+        <h4 className="font-bold">{editingId ? "編輯長假" : "新增長假"}</h4>
+        <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
+          <label className="block">
+            <span className="text-sm font-bold">開始日期</span>
+            <input
+              required
+              type="date"
+              value={form.startDate}
+              onChange={(event) =>
+                setForm((currentForm) => ({
+                  ...currentForm,
+                  startDate: event.target.value,
+                }))
+              }
+              className="mt-2 w-full rounded-2xl border border-[#E5D9BD] bg-white px-3 py-3"
+            />
+          </label>
+          <label className="block">
+            <span className="text-sm font-bold">結束日期</span>
+            <input
+              type="date"
+              value={form.endDate}
+              onChange={(event) =>
+                setForm((currentForm) => ({
+                  ...currentForm,
+                  endDate: event.target.value,
+                }))
+              }
+              className="mt-2 w-full rounded-2xl border border-[#E5D9BD] bg-white px-3 py-3"
+            />
+          </label>
+        </div>
+        <label className="block">
+          <span className="text-sm font-bold">原因</span>
+          <input
+            value={form.reason}
+            onChange={(event) =>
+              setForm((currentForm) => ({ ...currentForm, reason: event.target.value }))
+            }
+            className="mt-2 w-full rounded-2xl border border-[#E5D9BD] bg-white px-3 py-3"
+          />
+        </label>
+        <label className="block">
+          <span className="text-sm font-bold">常年費</span>
+          <input
+            type="number"
+            min={0}
+            value={form.annualFeeAmount}
+            onChange={(event) =>
+              setForm((currentForm) => ({
+                ...currentForm,
+                annualFeeAmount: Number(event.target.value) || 0,
+              }))
+            }
+            className="mt-2 w-full rounded-2xl border border-[#E5D9BD] bg-white px-3 py-3"
+          />
+        </label>
+        <label className="block">
+          <span className="text-sm font-bold">備註</span>
+          <textarea
+            rows={2}
+            value={form.note}
+            onChange={(event) =>
+              setForm((currentForm) => ({ ...currentForm, note: event.target.value }))
+            }
+            className="mt-2 w-full resize-none rounded-2xl border border-[#E5D9BD] bg-white px-3 py-3"
+          />
+        </label>
+        <label className="flex items-center gap-3 rounded-2xl bg-white p-3 font-bold">
+          <input
+            type="checkbox"
+            checked={form.isActive}
+            onChange={(event) =>
+              setForm((currentForm) => ({
+                ...currentForm,
+                isActive: event.target.checked,
+              }))
+            }
+            className="h-5 w-5"
+          />
+          啟用此長假紀錄
+        </label>
+        <div className="grid grid-cols-2 gap-3">
+          <button
+            type="submit"
+            className={`rounded-2xl bg-[#F7C948] py-3 font-bold ${buttonShadow}`}
+          >
+            {editingId ? "儲存長假" : "新增長假"}
+          </button>
+          <button
+            type="button"
+            onClick={resetLeaveForm}
+            className={`rounded-2xl bg-white py-3 font-bold ${buttonShadow}`}
+          >
+            取消
+          </button>
+        </div>
+      </form>
+
+      <div className="space-y-3">
+        <h4 className="font-bold">長假歷史</h4>
+        {sortedPeriods.length === 0 ? (
+          <p className="rounded-2xl bg-white p-3 text-sm font-bold text-[#173B73]/70">
+            尚未建立長假紀錄。
+          </p>
+        ) : (
+          sortedPeriods.map((period) => (
+            <article key={period.id} className="rounded-2xl bg-white p-3 text-sm font-bold">
+              <div className="flex flex-wrap items-center justify-between gap-2">
+                <span>
+                  {period.startDate} - {period.endDate || "未定"}
+                </span>
+                <span
+                  className={`rounded-full px-3 py-1 text-xs text-white ${
+                    period.isActive ? "bg-[#173B73]" : "bg-gray-400"
+                  }`}
+                >
+                  {period.isActive ? "啟用" : "停用"}
+                </span>
+              </div>
+              <p className="mt-2">原因：{period.reason || "-"}</p>
+              <p>常年費：{formatCurrency(period.annualFeeAmount || 1000)}</p>
+              <p>備註：{period.note || "-"}</p>
+              <div className="mt-3 grid grid-cols-2 gap-2">
+                <SmallButton onClick={() => editPeriod(period)}>編輯</SmallButton>
+                <SmallButton onClick={() => editPeriod(period)}>延長長假</SmallButton>
+                <SmallButton
+                  onClick={() =>
+                    void patchPeriod(period, {
+                      endDate: getTodayDate(),
+                      isActive: true,
+                    })
+                  }
+                >
+                  提前結束
+                </SmallButton>
+                <SmallButton
+                  onClick={() => void patchPeriod(period, { isActive: false })}
+                >
+                  停用錯誤紀錄
+                </SmallButton>
+              </div>
+            </article>
+          ))
+        )}
+      </div>
+    </section>
+  );
+}
+
+function SmallButton({ children, onClick }: { children: string; onClick: () => void }) {
+  return (
+    <button
+      type="button"
+      onClick={onClick}
+      className={`rounded-2xl bg-white px-3 py-2 text-sm font-bold ${buttonShadow}`}
+    >
+      {children}
+    </button>
   );
 }
 
@@ -706,6 +1089,19 @@ function getDateMonth(dateValue: string) {
 
 function formatStatus(status: MemberStatus) {
   return status === "active" ? "現任" : "停用";
+}
+
+function formatCurrency(value: number) {
+  return new Intl.NumberFormat("zh-TW", {
+    style: "currency",
+    currency: "TWD",
+    maximumFractionDigits: 0,
+  }).format(value);
+}
+
+function getTodayDate() {
+  const now = new Date();
+  return `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, "0")}-${String(now.getDate()).padStart(2, "0")}`;
 }
 
 function escapeCsvValue(value: string) {

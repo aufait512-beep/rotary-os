@@ -10,10 +10,15 @@ import {
   PaymentMethod,
 } from "@/lib/dues";
 import { defaultEventTimes, emptyEventItem, EventItem, RotaryYear } from "@/lib/events";
+import {
+  isMemberOnLeaveDuringMonth,
+  MemberLeavePeriod,
+} from "@/lib/memberLeave";
 import { formatMemberName, Member } from "@/lib/members";
 import {
   fetchDuesRecords,
   fetchEvents,
+  fetchMemberLeavePeriods,
   fetchMembers,
   fetchRotaryYears,
   upsertDuesRecord,
@@ -74,6 +79,7 @@ type BatchRow = {
   redBox: number;
   rotaryFoundation: number;
   passThrough: number;
+  leavePeriod?: MemberLeavePeriod;
 };
 
 type BatchMoneyField =
@@ -292,11 +298,20 @@ export default function AssistantPage() {
     setBatchProgress("");
 
     try {
-      const [members, records] = await Promise.all([fetchMembers(), fetchDuesRecords()]);
+      const [members, records, leavePeriods] = await Promise.all([
+        fetchMembers(),
+        fetchDuesRecords(),
+        fetchMemberLeavePeriods(),
+      ]);
       const activeMembers = members.filter((member) => member.status !== "inactive");
       const rows = activeMembers.map((member) => {
         const existingRecord = records.some(
           (record) => record.memberId === member.id && record.periodMonth === batchMonth
+        );
+        const leaveStatus = isMemberOnLeaveDuringMonth(
+          member.id,
+          batchMonth,
+          leavePeriods
         );
         return {
           member,
@@ -304,11 +319,14 @@ export default function AssistantPage() {
           exists: existingRecord,
           previousBalance: findPreviousBalance(member.id, batchMonth, records),
           meal: 0,
-          annualFee: 0,
+          annualFee: leaveStatus.isOnLeave
+            ? leaveStatus.annualFeeAmount || 1000
+            : 0,
           specialDonation: 0,
           redBox: 0,
           rotaryFoundation: 270,
           passThrough: 0,
+          leavePeriod: leaveStatus.leavePeriod,
         };
       });
       setBatchRows(rows);
@@ -688,11 +706,18 @@ export default function AssistantPage() {
                             />
                             <span className="break-words">{formatMemberName(row.member)}</span>
                           </label>
-                          {row.exists ? (
-                            <span className="shrink-0 rounded-full bg-[#173B73] px-3 py-1 text-xs font-bold text-white">
-                              已有紀錄
-                            </span>
-                          ) : null}
+                          <div className="flex shrink-0 flex-col items-end gap-2">
+                            {row.exists ? (
+                              <span className="rounded-full bg-[#173B73] px-3 py-1 text-xs font-bold text-white">
+                                已有紀錄
+                              </span>
+                            ) : null}
+                            {row.leavePeriod ? (
+                              <span className="rounded-full bg-[#F47C6C] px-3 py-1 text-xs font-bold text-white">
+                                長假常年費 {formatCurrency(row.annualFee)}
+                              </span>
+                            ) : null}
+                          </div>
                         </div>
                         <div className="mt-3 grid grid-cols-2 gap-2 text-sm">
                           <MoneyInput label="前期未繳" value={row.previousBalance} onChange={(value) => updateBatchMoney(row.member.id, "previousBalance", value)} />

@@ -12,10 +12,16 @@ import {
   MeetingAttendance,
 } from "@/lib/attendance";
 import { EventItem } from "@/lib/events";
+import {
+  isMemberOnLeave,
+  MemberLeavePeriod,
+  sortMembersByLeaveStatus,
+} from "@/lib/memberLeave";
 import { formatMemberName, Member, sortMembersByName } from "@/lib/members";
 import {
   fetchEvents,
   fetchMeetingAttendance,
+  fetchMemberLeavePeriods,
   fetchMembers,
   upsertEvent,
   upsertMeetingAttendance,
@@ -36,6 +42,7 @@ export default function MeetingAttendancePanel({
   const [isOpen, setIsOpen] = useState(false);
   const [isActualOpen, setIsActualOpen] = useState(false);
   const [members, setMembers] = useState<Member[]>([]);
+  const [leavePeriods, setLeavePeriods] = useState<MemberLeavePeriod[]>([]);
   const [records, setRecords] = useState<MeetingAttendance[]>([]);
   const [allMeetingEvents, setAllMeetingEvents] = useState<EventItem[]>([]);
   const [allAttendance, setAllAttendance] = useState<MeetingAttendance[]>([]);
@@ -47,8 +54,13 @@ export default function MeetingAttendancePanel({
   const [mealAmount, setMealAmount] = useState(eventItem.eventMealAmount || 0);
 
   const activeMembers = useMemo(
-    () => sortMembersByName(members.filter(isActiveMember)),
-    [members]
+    () =>
+      sortMembersByLeaveStatus(
+        sortMembersByName(members.filter(isActiveMember)),
+        eventItem.date,
+        leavePeriods
+      ),
+    [eventItem.date, leavePeriods, members]
   );
   const visibleRows = useMemo(() => {
     return activeMembers
@@ -72,9 +84,27 @@ export default function MeetingAttendancePanel({
       ),
     [activeMembers, eventItem.id, mealAmount, records]
   );
+  const regularRows = useMemo(
+    () =>
+      allRows.filter(
+        (record) =>
+          !isMemberOnLeave(record.memberId, eventItem.date, leavePeriods).isOnLeave
+      ),
+    [allRows, eventItem.date, leavePeriods]
+  );
+  const leaveStatusByMemberId = useMemo(
+    () =>
+      new Map(
+        activeMembers.map((member) => [
+          member.id,
+          isMemberOnLeave(member.id, eventItem.date, leavePeriods),
+        ])
+      ),
+    [activeMembers, eventItem.date, leavePeriods]
+  );
   const summary = useMemo(
-    () => buildAttendanceSummary(eventItem, allRows),
-    [allRows, eventItem]
+    () => buildAttendanceSummary(eventItem, regularRows),
+    [eventItem, regularRows]
   );
   const annualStats = useMemo(
     () => buildAnnualStats(allMeetingEvents, allAttendance, eventItem.rotaryYearId),
@@ -97,14 +127,22 @@ export default function MeetingAttendancePanel({
   async function loadAttendance() {
     try {
       setErrorMessage("");
-      const [loadedMembers, eventRecords, loadedEvents, loadedAttendance] =
+      const [
+        loadedMembers,
+        loadedLeavePeriods,
+        eventRecords,
+        loadedEvents,
+        loadedAttendance,
+      ] =
         await Promise.all([
           fetchMembers(),
+          fetchMemberLeavePeriods(),
           fetchMeetingAttendance(eventItem.id),
           fetchEvents(),
           fetchMeetingAttendance(),
         ]);
       setMembers(loadedMembers);
+      setLeavePeriods(loadedLeavePeriods);
       setRecords(eventRecords);
       setAllMeetingEvents(loadedEvents.filter(isMeetingEvent));
       setAllAttendance(loadedAttendance);
@@ -164,7 +202,7 @@ export default function MeetingAttendancePanel({
     const confirmed = window.confirm("確定要套用預計出席為實際出席嗎？");
     if (!confirmed) return;
 
-    const nextRecords = allRows.map((record) => ({
+    const nextRecords = regularRows.map((record) => ({
       ...record,
       actualAttendance: record.plannedAttendance,
     }));
@@ -284,6 +322,7 @@ export default function MeetingAttendancePanel({
                   record={record}
                   eventMealAmount={mealAmount || eventItem.eventMealAmount || 0}
                   isActualOpen={isActualOpen}
+                  leaveStatus={leaveStatusByMemberId.get(member.id)}
                   annualStat={annualStats.get(member.id)}
                   annualMeetingTotal={annualMeetingTotal}
                   isSaving={savingMemberId === member.id}
@@ -313,6 +352,7 @@ function AttendanceMemberCard({
   record,
   eventMealAmount,
   isActualOpen,
+  leaveStatus,
   annualStat,
   annualMeetingTotal,
   isSaving,
@@ -322,6 +362,7 @@ function AttendanceMemberCard({
   record: MeetingAttendance;
   eventMealAmount: number;
   isActualOpen: boolean;
+  leaveStatus?: ReturnType<typeof isMemberOnLeave>;
   annualStat?: { actual: number; total: number };
   annualMeetingTotal: number;
   isSaving: boolean;
@@ -358,7 +399,24 @@ function AttendanceMemberCard({
         <span className="rounded-full bg-[#173B73] px-3 py-1 text-xs font-bold text-white">
           {isSaving ? "儲存中" : formatAttendanceStatus(record.responseStatus)}
         </span>
+        {leaveStatus?.isOnLeave ? (
+          <span className="rounded-full bg-[#F47C6C] px-3 py-1 text-xs font-bold text-white">
+            長假
+          </span>
+        ) : null}
       </div>
+      {leaveStatus?.isOnLeave && leaveStatus.leavePeriod ? (
+        <div className="mt-3 rounded-2xl bg-[#FFF6D6] p-3 text-sm font-bold">
+          <p>
+            長假期間：{leaveStatus.leavePeriod.startDate} -{" "}
+            {leaveStatus.leavePeriod.endDate || "未定"}
+          </p>
+          <p>常年費：{formatCurrency(leaveStatus.annualFeeAmount || 1000)}</p>
+          {leaveStatus.leavePeriod.reason ? (
+            <p>原因：{leaveStatus.leavePeriod.reason}</p>
+          ) : null}
+        </div>
+      ) : null}
 
       <div className="mt-4 grid grid-cols-1 gap-3 sm:grid-cols-2">
         <label className="block">
@@ -527,6 +585,14 @@ function buildAnnualStats(
   });
 
   return stats;
+}
+
+function formatCurrency(value: number) {
+  return new Intl.NumberFormat("zh-TW", {
+    style: "currency",
+    currency: "TWD",
+    maximumFractionDigits: 0,
+  }).format(value);
 }
 
 function getErrorMessage(error: unknown, fallback: string) {
