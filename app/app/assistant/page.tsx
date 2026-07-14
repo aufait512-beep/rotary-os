@@ -114,11 +114,11 @@ type MemberDuesRangeBundle = {
 const buttonShadow =
   "shadow-[6px_6px_12px_rgba(0,0,0,0.18),-4px_-4px_10px_rgba(255,255,255,0.85)] active:translate-y-1 active:shadow-inner";
 
-const sampleText = `7/22 蝚?6甈∩???銝餉?鈭綽?????銝駁?嚗I 憒???嗉憚??
-擗? 18:30
-?? 19:15
-蝯? 20:10
-?圈?嚗?頠?撟喳? B1`;
+const sampleText = `7/22 第426次例會，主講人王大明，主題 AI 與產業趨勢
+餐敘 18:30
+開會 19:15
+結束 20:10
+地點：翰品酒店 B1`;
 
 export default function AssistantPage() {
   const defaultMonth = useMemo(() => getPreviousMonth(), []);
@@ -499,7 +499,7 @@ export default function AssistantPage() {
     const nextRecords = [...latestRecords];
 
     for (const [index, row] of confirmedRows.entries()) {
-      setBatchProgress(`甇?撱箇? ${index + 1} / ${confirmedRows.length}`);
+      setBatchProgress(`正在建立 ${index + 1} / ${confirmedRows.length}`);
       const alreadyExists = nextRecords.some(
         (record) => record.memberId === row.member.id && record.periodMonth === batchMonth
       );
@@ -667,14 +667,16 @@ export default function AssistantPage() {
       <section className="mx-auto max-w-md space-y-6">
         <header className="space-y-3">
           <Link href="/" className="text-sm font-bold text-[#173B73]/75">
-            ????          </Link>
+            回首頁
+          </Link>
           <div>
             <p className="text-sm font-bold tracking-[0.18em] text-[#C99700]">
               Rotary OS
             </p>
-            <h1 className="mt-2 text-3xl font-bold">Jade AI ?拍?</h1>
+            <h1 className="mt-2 text-3xl font-bold">Jade AI 助理</h1>
             <p className="mt-2 text-sm font-semibold text-[#173B73]/70">
-              ?箸?渡?瘣餃??閰Ｘ蝜喟冗鞎鳴?銝血??拇??冗鞎餅甈∩?璆准?            </p>
+              貼上活動文字、查詢社費、建立每月社費批次，並匯出社友個人社費明細。
+            </p>
           </div>
         </header>
 
@@ -690,13 +692,13 @@ export default function AssistantPage() {
         ) : null}
 
         <AssistantSection
-          title="?箸撱箇?瘣餃?"
+          title="智慧建立活動"
           isOpen={openSection === "event"}
           onToggle={() => toggleSection("event")}
         >
           <section className="space-y-4">
             <label className="block">
-              <span className="text-sm font-bold">瘣餃???頛詨</span>
+              <span className="text-sm font-bold">活動文字貼上區</span>
               <textarea
                 value={inputText}
                 onChange={(event) => setInputText(event.target.value)}
@@ -713,14 +715,14 @@ export default function AssistantPage() {
                 disabled={isParsing || inputText.trim() === ""}
                 className={`rounded-2xl bg-[#F7C948] py-4 font-bold disabled:opacity-60 ${buttonShadow}`}
               >
-                {isParsing ? "?渡?銝?.." : "AI ?渡?瘣餃?"}
+                {isParsing ? "AI 整理中..." : "AI 整理活動"}
               </button>
               <button
                 type="button"
                 onClick={clearAll}
                 className={`rounded-2xl bg-white py-4 font-bold ${buttonShadow}`}
               >
-                皜
+                清除
               </button>
             </div>
 
@@ -776,14 +778,14 @@ export default function AssistantPage() {
                 disabled={isSaving}
                 className={`w-full rounded-2xl bg-[#F7C948] py-4 font-bold disabled:opacity-60 ${buttonShadow}`}
               >
-                {isSaving ? "?啣?銝?.." : "蝣箄??啣?瘣餃?"}
+                {isSaving ? "儲存中..." : "儲存活動"}
               </button>
             </form>
           </section>
         </AssistantSection>
 
         <AssistantSection
-          title="?芰像蝷曇祥?亥岷"
+          title="未繳社費查詢"
           isOpen={openSection === "unpaid"}
           onToggle={() => toggleSection("unpaid")}
         >
@@ -977,7 +979,7 @@ export default function AssistantPage() {
           </div>
         </AssistantSection>
         <AssistantSection
-          title="瘥?蝷曇祥?寞活雿平"
+          title="每月社費批次作業"
           isOpen={openSection === "batch"}
           onToggle={() => toggleSection("batch")}
         >
@@ -994,9 +996,9 @@ export default function AssistantPage() {
             ) : null}
 
             <section className="space-y-3 rounded-2xl bg-[#F8F3E8] p-4">
-              <h2 className="text-xl font-bold">撱箇??券?蝷曉?蝷曇祥</h2>
+              <h2 className="text-xl font-bold">建立全體社友社費</h2>
               <label className="block">
-                <span className="text-sm font-bold">?寞活?遢</span>
+                <span className="text-sm font-bold">批次月份</span>
                 <input
                   type="month"
                   value={batchMonth}
@@ -1005,7 +1007,7 @@ export default function AssistantPage() {
                 />
               </label>
               <button type="button" onClick={buildBatchPreview} className={`w-full rounded-2xl bg-[#F7C948] py-3 font-bold ${buttonShadow}`}>
-                撱箇??券?蝷曉?蝷曇祥
+                建立全體社友社費
               </button>
               {batchRows.length > 0 ? (
                 <div className="space-y-3">
@@ -1061,16 +1063,16 @@ export default function AssistantPage() {
                     );
                   })}
                   <button type="button" onClick={confirmCreateBatch} className={`w-full rounded-2xl bg-[#F7C948] py-4 font-bold ${buttonShadow}`}>
-                    蝣箄?撱箇??券?蝷曇祥
+                    確認建立全體社費
                   </button>
                 </div>
               ) : null}
             </section>
 
             <section className="space-y-3 rounded-2xl bg-[#F8F3E8] p-4">
-              <h2 className="text-xl font-bold">?祆??券?蝷曉??像鞎餌蝮質”</h2>
+              <h2 className="text-xl font-bold">全體社友本期應繳費用總表</h2>
               <label className="block">
-                <span className="text-sm font-bold">蝮質”?遢</span>
+                <span className="text-sm font-bold">總表月份</span>
                 <input
                   type="month"
                   value={summaryMonth}
@@ -1741,5 +1743,5 @@ function waitForBrowser() {
 }
 
 function getErrorMessage(error: unknown, fallback: string) {
-  return error instanceof Error ? `${fallback}嚗?{error.message}` : fallback;
+  return error instanceof Error ? `${fallback}：${error.message}` : fallback;
 }
