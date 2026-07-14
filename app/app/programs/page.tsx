@@ -134,7 +134,7 @@ export default function ProgramsPage() {
       await html2pdf()
         .set({
           filename: buildPdfFilename(activeEvent),
-          margin: 0,
+          margin: 8,
           image: { type: "jpeg", quality: 0.98 },
           html2canvas: {
             scale: 3,
@@ -434,16 +434,16 @@ export default function ProgramsPage() {
               id="program-sheet"
               className="program-sheet mx-auto"
             >
-              <header className="relative border-b border-black pb-3 text-center">
-                <p className="absolute right-0 top-0 text-[14pt]">
+              <header className="program-header relative border-b border-black text-center">
+                <p className="program-date absolute right-0 top-0">
                   {formatProgramDate(activeEvent.date)}
                 </p>
-                <h2 className="pt-8 text-[22pt] font-bold leading-snug">
+                <h2 className="program-title font-bold leading-snug">
                   {buildProgramTitle(activeEvent)}
                 </h2>
               </header>
 
-              <section className="mt-7">
+              <section className="program-body">
                 <ProgramRow time="19:15">
                   <p>會議開始</p>
                   <p>社長鳴鐘</p>
@@ -452,7 +452,7 @@ export default function ProgramsPage() {
                   <p>介紹社友及來賓</p>
                   <p>唱扶輪社友我們歡迎您</p>
 
-                  <div className="mt-4">
+                  <div className="four-way-test">
                     <p>請社長帶領社友朗讀 四大考驗</p>
                     <p>
                       四大考驗～我們所想、所說、所做的事應事先捫心自問：
@@ -471,11 +471,13 @@ export default function ProgramsPage() {
 
                 <UpcomingEventsTable events={upcomingEvents} />
 
-                <ProgramRow time="19:35">
-                  <p>講師介紹：</p>
-                  <p>{activeEvent.speaker || "-"}</p>
-                  <p className="mt-3">專題演講：</p>
-                  <p>{activeEvent.topic || "-"}</p>
+                <ProgramRow time="19:35" className="speaker-session">
+                  <p className="program-nowrap" title={`講師介紹：${activeEvent.speaker || "-"}`}>
+                    講師介紹：{activeEvent.speaker || "-"}
+                  </p>
+                  <p className="program-nowrap" title={`專題演講：${activeEvent.topic || "-"}`}>
+                    專題演講：{activeEvent.topic || "-"}
+                  </p>
                 </ProgramRow>
 
                 <ProgramRow time="20:05">
@@ -559,13 +561,15 @@ export default function ProgramsPage() {
 function ProgramRow({
   time,
   children,
+  className = "",
 }: {
   time: string;
   children: React.ReactNode;
+  className?: string;
 }) {
   return (
-    <div className="grid grid-cols-[27mm_1fr] gap-4 py-1">
-      <div className="font-bold">{time}</div>
+    <div className={`program-row grid grid-cols-[22mm_1fr] gap-2 ${className}`}>
+      <div className="program-time font-bold">{time}</div>
       <div>{children}</div>
     </div>
   );
@@ -573,43 +577,43 @@ function ProgramRow({
 
 function UpcomingEventsTable({ events }: { events: EventItem[] }) {
   return (
-    <div className="my-4">
-      <table className="w-full border-collapse border border-black text-[12pt] leading-snug">
+    <div className="upcoming-events-block">
+      <table className="program-upcoming-table w-full border-collapse border border-black leading-snug">
         <thead>
           <tr>
-            <th className="w-[18%] border border-black px-2 py-1">日期</th>
-            <th className="w-[42%] border border-black px-2 py-1">
+            <th className="w-[18%] border border-black">日期</th>
+            <th className="w-[42%] border border-black">
               2026年 活動
             </th>
-            <th className="w-[18%] border border-black px-2 py-1">時間</th>
-            <th className="w-[22%] border border-black px-2 py-1">地點</th>
+            <th className="w-[18%] border border-black">時間</th>
+            <th className="w-[22%] border border-black">地點</th>
           </tr>
         </thead>
         <tbody>
           {events.length === 0 ? (
             <tr>
-              <td className="border border-black px-2 py-2 text-center" colSpan={4}>
+              <td className="border border-black text-center" colSpan={4}>
                 -
               </td>
             </tr>
           ) : (
             events.map((eventItem) => (
               <tr key={eventItem.id}>
-                <td className="border border-black px-2 py-2 text-center align-top">
+                <td className="border border-black text-center align-top">
                   <p>{formatAnnouncementDate(eventItem.date)}</p>
                   <p>({formatWeekday(eventItem)})</p>
                 </td>
-                <td className="border border-black px-2 py-2 align-top">
+                <td className="border border-black align-top">
                   <p>{eventItem.title || "-"}</p>
                   <p>{eventItem.topic || "-"}</p>
                   <p>{eventItem.speaker || "-"}</p>
                   <p>{eventItem.note || "-"}</p>
                 </td>
-                <td className="border border-black px-2 py-2 align-top">
+                <td className="border border-black align-top">
                   <p>{eventItem.dinnerTime || "-"}</p>
                   <p>{eventItem.meetingTime || "-"}</p>
                 </td>
-                <td className="border border-black px-2 py-2 align-top">
+                <td className="border border-black align-top">
                   <p>{eventItem.location || "-"}</p>
                   <p>{eventItem.room || "-"}</p>
                 </td>
