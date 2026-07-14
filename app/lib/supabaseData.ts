@@ -7,6 +7,7 @@ import { Member, normalizeMember, sortMembersByName } from "@/lib/members";
 import { ProgramItem } from "@/lib/programs";
 
 type DbRecord = Record<string, unknown>;
+type MemberWrite = Omit<Member, "note"> & { note?: string };
 
 export async function fetchMembers() {
   const { data, error } = await supabase
@@ -17,7 +18,7 @@ export async function fetchMembers() {
   return sortMembersByName((data ?? []).map(mapMemberFromRow));
 }
 
-export async function upsertMember(member: Member) {
+export async function upsertMember(member: MemberWrite) {
   const { data, error } = await supabase
     .from("members")
     .upsert(mapMemberToRow(member), { onConflict: "id" })
@@ -27,7 +28,7 @@ export async function upsertMember(member: Member) {
   return mapMemberFromRow(data);
 }
 
-export async function insertMember(member: Member) {
+export async function insertMember(member: MemberWrite) {
   const { data, error } = await supabase
     .from("members")
     .insert(mapMemberFieldsToRow(member))
@@ -327,14 +328,14 @@ function mapMemberFromRow(row: DbRecord): Member {
   });
 }
 
-function mapMemberToRow(member: Member) {
+function mapMemberToRow(member: MemberWrite) {
   return {
     id: member.id,
     ...mapMemberFieldsToRow(member),
   };
 }
 
-function mapMemberFieldsToRow(member: Member) {
+function mapMemberFieldsToRow(member: MemberWrite) {
   return {
     chinese_name: member.chineseName,
     rotary_name: member.rotaryName,
@@ -357,7 +358,6 @@ function mapMemberFieldsToRow(member: Member) {
     little_rotary: member.littleRotary,
     ri_no: member.riNo,
     status: member.status,
-    note: member.note,
   };
 }
 

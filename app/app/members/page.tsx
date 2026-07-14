@@ -25,13 +25,37 @@ import {
   upsertMember,
 } from "@/lib/supabaseData";
 
-type MemberFormState = Omit<Member, "id" | "createdAt">;
+type MemberFormState = Omit<Member, "id" | "createdAt" | "note">;
 type MemberField = keyof MemberFormState;
 type LeaveFormState = Omit<MemberLeavePeriod, "id" | "memberId" | "createdAt" | "updatedAt">;
 type LeaveFilter = "all" | "normal" | "on_leave";
 
 const buttonShadow =
   "shadow-[6px_6px_12px_rgba(0,0,0,0.18),-4px_-4px_10px_rgba(255,255,255,0.85)] active:translate-y-1 active:shadow-inner";
+
+const emptyMemberForm: MemberFormState = {
+  chineseName: emptyMember.chineseName,
+  englishName: emptyMember.englishName,
+  rotaryName: emptyMember.rotaryName,
+  title: emptyMember.title,
+  rotaryTitle: emptyMember.rotaryTitle,
+  birthdayMonth: emptyMember.birthdayMonth,
+  phone: emptyMember.phone,
+  mobile: emptyMember.mobile,
+  email: emptyMember.email,
+  spouse: emptyMember.spouse,
+  joinDate: emptyMember.joinDate,
+  birthday: emptyMember.birthday,
+  anniversary: emptyMember.anniversary,
+  classification: emptyMember.classification,
+  organization: emptyMember.organization,
+  workAddress: emptyMember.workAddress,
+  homeAddress: emptyMember.homeAddress,
+  fax: emptyMember.fax,
+  littleRotary: emptyMember.littleRotary,
+  riNo: emptyMember.riNo,
+  status: emptyMember.status,
+};
 
 const memberFields: {
   name: MemberField;
@@ -83,13 +107,12 @@ const detailFields: { label: string; value: (member: Member) => string }[] = [
   { label: "小扶輪", value: (member) => member.littleRotary },
   { label: "RI 編號", value: (member) => member.riNo },
   { label: "狀態", value: (member) => formatStatus(member.status) },
-  { label: "備註", value: (member) => member.note },
 ];
 
 export default function MembersPage() {
   const [members, setMembers] = useState<Member[]>([]);
   const [leavePeriods, setLeavePeriods] = useState<MemberLeavePeriod[]>([]);
-  const [form, setForm] = useState<MemberFormState>(emptyMember);
+  const [form, setForm] = useState<MemberFormState>(emptyMemberForm);
   const [editingId, setEditingId] = useState<string | null>(null);
   const [searchTerm, setSearchTerm] = useState("");
   const [leaveFilter, setLeaveFilter] = useState<LeaveFilter>("all");
@@ -181,7 +204,7 @@ export default function MembersPage() {
   }
 
   function resetForm() {
-    setForm(emptyMember);
+    setForm(emptyMemberForm);
     setEditingId(null);
     setIsFormOpen(false);
   }
@@ -241,7 +264,6 @@ export default function MembersPage() {
       fax: member.fax,
       littleRotary: member.littleRotary,
       riNo: member.riNo,
-      note: member.note,
       status: member.status,
     });
     setSelectedMember(null);
@@ -355,7 +377,6 @@ export default function MembersPage() {
       "夫人",
       "小扶輪",
       "RI 編號",
-      "備註",
       "建立時間",
     ];
     const rows = filteredMembers.map((member) => [
@@ -380,7 +401,6 @@ export default function MembersPage() {
       member.spouse,
       member.littleRotary,
       member.riNo,
-      member.note,
       member.createdAt,
     ]);
     const csv = [headers, ...rows]
@@ -498,16 +518,6 @@ export default function MembersPage() {
               <option value="active">現任</option>
               <option value="inactive">停用</option>
             </select>
-          </label>
-
-          <label className="block">
-            <span className="text-sm font-bold">備註</span>
-            <textarea
-              value={form.note}
-              onChange={(event) => updateField("note", event.target.value)}
-              rows={4}
-              className="mt-2 w-full rounded-2xl border border-[#E5D9BD] bg-white px-4 py-3 outline-none focus:border-[#173B73] focus:ring-2 focus:ring-[#F7C948]"
-            />
           </label>
 
           <button
