@@ -12,7 +12,8 @@ import {
   deleteProgram,
   fetchEvents,
   fetchPrograms,
-  upsertProgram,
+  insertProgram,
+  updateProgram,
 } from "@/lib/supabaseData";
 
 type ProgramFormState = Omit<ProgramItem, "id">;
@@ -207,50 +208,61 @@ export default function ProgramsPage() {
   async function handleSubmit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
     setErrorMessage("");
+    setProgramNotice("");
+
+    if (!form.eventId || !isUuid(form.eventId)) {
+      setErrorMessage("請先選擇例會活動");
+      return;
+    }
+
+    const linkedEvent = sortedEvents.find((eventItem) => eventItem.id === form.eventId);
+    if (!linkedEvent) {
+      setErrorMessage("請先選擇例會活動");
+      return;
+    }
+
+    const existingProgram = programs.find(
+      (program) => program.eventId === form.eventId && program.id !== editingId
+    );
+    if (existingProgram) {
+      const editableProgram = mergeProgramWithEvent(existingProgram, linkedEvent);
+      handleEdit(editableProgram, false);
+      setProgramNotice("此活動已有程序表，已切換為編輯既有紀錄。");
+      return;
+    }
+
+    const payload = buildProgramForSave(form, linkedEvent, editingId ?? crypto.randomUUID());
 
     try {
       if (editingId) {
-        const savedProgram = await upsertProgram({ ...form, id: editingId });
-        setPrograms((currentPrograms) =>
-          currentPrograms.map((program) =>
-            program.id === editingId ? savedProgram : program
-          )
-        );
+        const savedProgram = await updateProgram(payload);
+        const reloadedPrograms = await fetchPrograms();
+        setPrograms(reloadedPrograms);
+        setEditingId(savedProgram.id);
+        setForm(programToForm(mergeProgramWithEvent(savedProgram, linkedEvent)));
       } else {
-        const savedProgram = await upsertProgram({
-          ...form,
-          id: crypto.randomUUID(),
-        });
-        setPrograms((currentPrograms) => [savedProgram, ...currentPrograms]);
+        const savedProgram = await insertProgram(payload);
+        const reloadedPrograms = await fetchPrograms();
+        setPrograms(reloadedPrograms);
+        setEditingId(savedProgram.id);
+        setForm(programToForm(mergeProgramWithEvent(savedProgram, linkedEvent)));
       }
+      setProgramNotice("程序表已儲存");
     } catch (error) {
       console.error({
         module: "programs",
-        operation: "save program",
+        operation: editingId ? "update program" : "insert program",
         table: "programs",
+        payload,
         error,
       });
       setErrorMessage(getErrorMessage(error, "程序表儲存失敗"));
       return;
     }
-
-    resetForm();
   }
 
   function handleEdit(program: ProgramItem, scrollToTop = true) {
-    setForm({
-      eventId: program.eventId,
-      meetingName: program.meetingName,
-      date: program.date,
-      dinnerTime: program.dinnerTime,
-      meetingTime: program.meetingTime,
-      location: program.location,
-      room: program.room,
-      topic: program.topic,
-      speaker: program.speaker,
-      fellowshipChair: program.fellowshipChair,
-      sergeantAtArms: program.sergeantAtArms,
-    });
+    setForm(programToForm(program));
     setEditingId(program.id);
     setProgramNotice("");
     if (scrollToTop) {
@@ -651,6 +663,47 @@ function mergeProgramWithEvent(program: ProgramItem, eventItem: EventItem): Prog
     fellowshipChair: program.fellowshipChair || eventItem.fellowshipChair,
     sergeantAtArms: program.sergeantAtArms || eventItem.sergeantAtArms,
   };
+}
+
+function programToForm(program: ProgramItem): ProgramFormState {
+  return {
+    eventId: program.eventId,
+    meetingName: program.meetingName,
+    date: program.date,
+    dinnerTime: program.dinnerTime,
+    meetingTime: program.meetingTime,
+    location: program.location,
+    room: program.room,
+    topic: program.topic,
+    speaker: program.speaker,
+    fellowshipChair: program.fellowshipChair,
+    sergeantAtArms: program.sergeantAtArms,
+  };
+}
+
+function buildProgramForSave(
+  form: ProgramFormState,
+  eventItem: EventItem,
+  programId: string
+): ProgramItem {
+  return {
+    id: programId,
+    eventId: eventItem.id,
+    meetingName: form.meetingName || eventItem.title,
+    date: eventItem.date,
+    dinnerTime: eventItem.dinnerTime,
+    meetingTime: eventItem.meetingTime,
+    location: eventItem.location,
+    room: eventItem.room,
+    topic: eventItem.topic,
+    speaker: eventItem.speaker,
+    fellowshipChair: form.fellowshipChair || eventItem.fellowshipChair,
+    sergeantAtArms: form.sergeantAtArms || eventItem.sergeantAtArms,
+  };
+}
+
+function isUuid(value: string) {
+  return /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(value);
 }
 
 function programToEventFallback(program: ProgramFormState): EventItem {

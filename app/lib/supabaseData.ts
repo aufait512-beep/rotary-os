@@ -131,13 +131,44 @@ export async function fetchPrograms() {
   return (data ?? []).map(mapProgramFromRow);
 }
 
-export async function upsertProgram(program: ProgramItem) {
+export async function insertProgram(program: ProgramItem) {
+  const payload = mapProgramToRow(program);
   const { data, error } = await supabase
     .from("programs")
-    .upsert(mapProgramToRow(program), { onConflict: "id" })
+    .insert(payload)
     .select()
     .single();
-  if (error) throw error;
+  if (error) {
+    console.error({
+      module: "programs",
+      operation: "insert program",
+      table: "programs",
+      payload,
+      error,
+    });
+    throw error;
+  }
+  return mapProgramFromRow(data);
+}
+
+export async function updateProgram(program: ProgramItem) {
+  const payload = mapProgramToRow(program, false);
+  const { data, error } = await supabase
+    .from("programs")
+    .update(payload)
+    .eq("id", program.id)
+    .select()
+    .single();
+  if (error) {
+    console.error({
+      module: "programs",
+      operation: "update program",
+      table: "programs",
+      payload,
+      error,
+    });
+    throw error;
+  }
   return mapProgramFromRow(data);
 }
 
@@ -426,18 +457,11 @@ function mapProgramFromRow(row: DbRecord): ProgramItem {
   };
 }
 
-function mapProgramToRow(program: ProgramItem) {
+function mapProgramToRow(program: ProgramItem, includeId = true) {
   return {
-    id: program.id,
-    event_id: program.eventId || null,
+    ...(includeId ? { id: program.id } : {}),
+    event_id: program.eventId,
     title: program.meetingName,
-    date: emptyToNull(program.date),
-    dinner_time: emptyToNull(program.dinnerTime),
-    meeting_time: emptyToNull(program.meetingTime),
-    location: program.location,
-    room: program.room,
-    topic: program.topic,
-    speaker: program.speaker,
     fellowship_chair: program.fellowshipChair,
     sergeant_at_arms: program.sergeantAtArms,
   };
