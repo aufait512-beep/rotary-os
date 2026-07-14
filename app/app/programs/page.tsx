@@ -35,6 +35,7 @@ export default function ProgramsPage() {
   const [editingId, setEditingId] = useState<string | null>(null);
   const [isExportingPdf, setIsExportingPdf] = useState(false);
   const [errorMessage, setErrorMessage] = useState("");
+  const [programErrorMessage, setProgramErrorMessage] = useState("");
   const [programNotice, setProgramNotice] = useState("");
   const [showAllEvents, setShowAllEvents] = useState(false);
 
@@ -62,6 +63,7 @@ export default function ProgramsPage() {
 
   async function loadData() {
     setErrorMessage("");
+    setProgramErrorMessage("");
     setProgramNotice("");
 
     const [eventsResult, programsResult] = await Promise.allSettled([
@@ -70,7 +72,12 @@ export default function ProgramsPage() {
     ]);
 
     if (eventsResult.status === "rejected") {
-      console.error(eventsResult.reason);
+      console.error({
+        module: "programs",
+        operation: "fetch events",
+        table: "events",
+        error: eventsResult.reason,
+      });
       setErrorMessage(getErrorMessage(eventsResult.reason, "活動資料讀取失敗"));
       return;
     }
@@ -79,8 +86,13 @@ export default function ProgramsPage() {
     setEvents(loadedEvents);
 
     if (programsResult.status === "rejected") {
-      console.error(programsResult.reason);
-      setErrorMessage(getErrorMessage(programsResult.reason, "程序表資料查詢失敗"));
+      console.error({
+        module: "programs",
+        operation: "fetch programs",
+        table: "programs",
+        error: programsResult.reason,
+      });
+      setProgramErrorMessage("程序表資料讀取失敗，請重新整理後再試。");
       setPrograms([]);
     } else {
       setPrograms(programsResult.value);
@@ -159,7 +171,7 @@ export default function ProgramsPage() {
     );
 
     if (existingProgram) {
-      handleEdit(existingProgram, false);
+      handleEdit(mergeProgramWithEvent(existingProgram, eventForProgram), false);
       setProgramNotice("");
       return;
     }
@@ -212,6 +224,12 @@ export default function ProgramsPage() {
         setPrograms((currentPrograms) => [savedProgram, ...currentPrograms]);
       }
     } catch (error) {
+      console.error({
+        module: "programs",
+        operation: "save program",
+        table: "programs",
+        error,
+      });
       setErrorMessage(getErrorMessage(error, "程序表儲存失敗"));
       return;
     }
@@ -253,6 +271,12 @@ export default function ProgramsPage() {
         currentPrograms.filter((program) => program.id !== programId)
       );
     } catch (error) {
+      console.error({
+        module: "programs",
+        operation: "delete program",
+        table: "programs",
+        error,
+      });
       setErrorMessage(getErrorMessage(error, "程序表刪除失敗"));
       return;
     }
@@ -283,6 +307,11 @@ export default function ProgramsPage() {
         {programNotice ? (
           <p className="mx-auto max-w-md rounded-2xl bg-white/80 p-4 text-sm font-bold text-[#173B73]/75 print:hidden">
             {programNotice}
+          </p>
+        ) : null}
+        {programErrorMessage ? (
+          <p className="mx-auto max-w-md rounded-2xl border border-red-200 bg-red-50 p-4 text-sm font-bold text-red-700 print:hidden">
+            {programErrorMessage}
           </p>
         ) : null}
 
@@ -451,34 +480,48 @@ export default function ProgramsPage() {
 
         <section className="mx-auto max-w-md space-y-3 print:hidden">
           <h2 className="text-2xl font-bold">已儲存程序表</h2>
-          {sortedPrograms.length === 0 ? (
+          {programErrorMessage ? (
+            <div className="rounded-3xl bg-red-50 p-5 text-center font-semibold text-red-700 shadow-[6px_6px_16px_rgba(0,0,0,0.1),-6px_-6px_16px_rgba(255,255,255,0.8)]">
+              {programErrorMessage}
+            </div>
+          ) : sortedPrograms.length === 0 ? (
             <div className="rounded-3xl bg-white/75 p-5 text-center font-semibold text-[#173B73]/70 shadow-[6px_6px_16px_rgba(0,0,0,0.1),-6px_-6px_16px_rgba(255,255,255,0.8)]">
               目前尚未建立程序表
             </div>
           ) : (
-            sortedPrograms.map((program) => (
+            sortedPrograms.map((program) => {
+              const linkedEvent = sortedEvents.find(
+                (eventItem) => eventItem.id === program.eventId
+              );
+              const displayProgram = linkedEvent
+                ? mergeProgramWithEvent(program, linkedEvent)
+                : program;
+
+              return (
               <article
                 key={program.id}
                 className="rounded-3xl bg-white/85 p-5 shadow-[8px_8px_20px_rgba(0,0,0,0.12),-8px_-8px_20px_rgba(255,255,255,0.9)]"
               >
                 <p className="text-sm font-bold text-[#C99700]">
-                  {formatDateSlash(program.date)}
+                  {displayProgram.eventId
+                    ? formatDateSlash(displayProgram.date)
+                    : "此程序表尚未連結活動"}
                 </p>
                 <h3 className="mt-1 break-words text-xl font-bold">
-                  {program.meetingName || "未命名程序表"}
+                  {displayProgram.meetingName || "未命名程序表"}
                 </h3>
                 <div className="mt-3 space-y-1 text-sm font-semibold text-[#173B73]/80">
                   <p>
-                    地點：{program.location || "-"} {program.room}
+                    地點：{displayProgram.location || "-"} {displayProgram.room}
                   </p>
-                  <p>主題：{program.topic || "-"}</p>
-                  <p>主講人：{program.speaker || "-"}</p>
+                  <p>主題：{displayProgram.topic || "-"}</p>
+                  <p>主講人：{displayProgram.speaker || "-"}</p>
                 </div>
 
                 <div className="mt-5 grid grid-cols-2 gap-3">
                   <button
                     type="button"
-                    onClick={() => handleEdit(program)}
+                    onClick={() => handleEdit(displayProgram)}
                     className={`rounded-2xl bg-[#F7C948] py-3 font-bold text-[#173B73] ${buttonShadow}`}
                   >
                     編輯
@@ -492,7 +535,8 @@ export default function ProgramsPage() {
                   </button>
                 </div>
               </article>
-            ))
+              );
+            })
           )}
         </section>
       </section>
@@ -590,6 +634,23 @@ function getUpcomingEvents(activeEvent: EventItem, events: EventItem[]) {
       return sameMonthAfter || inNextMonth;
     })
   );
+}
+
+function mergeProgramWithEvent(program: ProgramItem, eventItem: EventItem): ProgramItem {
+  return {
+    ...program,
+    eventId: program.eventId || eventItem.id,
+    meetingName: program.meetingName || eventItem.title,
+    date: program.date || eventItem.date,
+    dinnerTime: program.dinnerTime || eventItem.dinnerTime,
+    meetingTime: program.meetingTime || eventItem.meetingTime,
+    location: program.location || eventItem.location,
+    room: program.room || eventItem.room,
+    topic: program.topic || eventItem.topic,
+    speaker: program.speaker || eventItem.speaker,
+    fellowshipChair: program.fellowshipChair || eventItem.fellowshipChair,
+    sergeantAtArms: program.sergeantAtArms || eventItem.sergeantAtArms,
+  };
 }
 
 function programToEventFallback(program: ProgramFormState): EventItem {

@@ -126,7 +126,7 @@ export async function fetchPrograms() {
   const { data, error } = await supabase
     .from("programs")
     .select("*")
-    .order("date", { ascending: true });
+    .order("created_at", { ascending: true });
   if (error) throw error;
   return (data ?? []).map(mapProgramFromRow);
 }
