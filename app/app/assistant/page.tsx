@@ -1,4 +1,4 @@
-"use client";
+﻿"use client";
 
 import Link from "next/link";
 import { FormEvent, ReactNode, useEffect, useMemo, useState } from "react";
@@ -60,7 +60,7 @@ type AssistantField =
   | "description"
   | "note";
 
-type OpenSection = "event" | "unpaid" | "batch" | "";
+type OpenSection = "event" | "unpaid" | "memberDues" | "batch" | "";
 
 type UnpaidRow = {
   record: DuesRecord;
@@ -104,16 +104,21 @@ type SummaryRow = {
   balance: number;
 };
 
+type MemberDuesFilter = "all" | "unpaid" | "paid";
+
+type MemberDuesRangeBundle = {
+  member: Member;
+  rows: SummaryRow[];
+};
+
 const buttonShadow =
   "shadow-[6px_6px_12px_rgba(0,0,0,0.18),-4px_-4px_10px_rgba(255,255,255,0.85)] active:translate-y-1 active:shadow-inner";
 
-const sampleText = `7/22 第26次例會
-主講人：王小明
-主題：AI 如何協助扶輪服務
-餐敘 18:30
-開會 19:15
-結束 20:10
-地點：寒軒和平店 B1`;
+const sampleText = `7/22 蝚?6甈∩???銝餉?鈭綽?????銝駁?嚗I 憒???嗉憚??
+擗? 18:30
+?? 19:15
+蝯? 20:10
+?圈?嚗?頠?撟喳? B1`;
 
 export default function AssistantPage() {
   const defaultMonth = useMemo(() => getPreviousMonth(), []);
@@ -130,11 +135,24 @@ export default function AssistantPage() {
   const [message, setMessage] = useState("");
   const [errorMessage, setErrorMessage] = useState("");
 
+  const currentMonth = useMemo(() => getCurrentMonth(), []);
+  const [members, setMembers] = useState<Member[]>([]);
   const [unpaidMonth, setUnpaidMonth] = useState(defaultMonth);
   const [unpaidRows, setUnpaidRows] = useState<UnpaidRow[]>([]);
 
   const [batchMonth, setBatchMonth] = useState(defaultMonth);
   const [summaryMonth, setSummaryMonth] = useState(defaultMonth);
+  const [memberSearch, setMemberSearch] = useState("");
+  const [selectedMemberId, setSelectedMemberId] = useState("");
+  const [memberDuesStartMonth, setMemberDuesStartMonth] = useState("");
+  const [memberDuesEndMonth, setMemberDuesEndMonth] = useState(currentMonth);
+  const [memberDuesFilter, setMemberDuesFilter] = useState<MemberDuesFilter>("all");
+  const [memberDuesRows, setMemberDuesRows] = useState<SummaryRow[]>([]);
+  const [expandedMemberDuesMonths, setExpandedMemberDuesMonths] = useState<string[]>([]);
+  const [batchExportStartMonth, setBatchExportStartMonth] = useState("");
+  const [batchExportEndMonth, setBatchExportEndMonth] = useState(currentMonth);
+  const [includeNoRecordMembers, setIncludeNoRecordMembers] = useState(false);
+  const [batchExportBundles, setBatchExportBundles] = useState<MemberDuesRangeBundle[]>([]);
   const [batchRows, setBatchRows] = useState<BatchRow[]>([]);
   const [summaryRows, setSummaryRows] = useState<SummaryRow[]>([]);
   const [batchMessage, setBatchMessage] = useState("");
@@ -148,25 +166,57 @@ export default function AssistantPage() {
   const unpaidTotal = unpaidRows.reduce((total, row) => total + row.balance, 0);
   const summaryTotals = calculateSummaryTotals(summaryRows);
 
+  const searchedMembers = useMemo(() => {
+    const keyword = memberSearch.trim().toLowerCase();
+    if (!keyword) return members;
+    return members.filter((member) =>
+      [member.chineseName, member.rotaryName]
+        .filter(Boolean)
+        .some((value) => value.toLowerCase().includes(keyword))
+    );
+  }, [memberSearch, members]);
+
+  const filteredMemberDuesRows = useMemo(() => {
+    if (memberDuesFilter === "unpaid") {
+      return memberDuesRows.filter((row) => row.balance > 0);
+    }
+    if (memberDuesFilter === "paid") {
+      return memberDuesRows.filter((row) => row.balance <= 0);
+    }
+    return memberDuesRows;
+  }, [memberDuesFilter, memberDuesRows]);
+
+  const memberDuesTotals = useMemo(
+    () => calculateSummaryTotals(filteredMemberDuesRows),
+    [filteredMemberDuesRows]
+  );
+
   useEffect(() => {
     async function loadYears() {
       try {
-        const loadedYears = await fetchRotaryYears();
+        const [loadedYears, loadedMembers] = await Promise.all([
+          fetchRotaryYears(),
+          fetchMembers(),
+        ]);
         setYears(loadedYears);
+        setMembers(loadedMembers);
         const active = loadedYears.find((year) => year.isActive) ?? loadedYears[0];
         if (active) {
           setForm((currentForm) => ({ ...currentForm, rotaryYearId: active.id }));
+          const startMonth = getRotaryYearStartMonth(active, currentMonth);
+          setMemberDuesStartMonth(startMonth);
+          setBatchExportStartMonth(startMonth);
         }
       } catch (error) {
         console.error(error);
         setErrorMessage(
-          error instanceof Error ? `年度資料讀取失敗：${error.message}` : "年度資料讀取失敗"
+          error instanceof Error ? `年度與社友資料讀取失敗：${error.message}` : "年度與社友資料讀取失敗"
         );
       }
     }
 
     void loadYears();
-  }, []);
+  }, [currentMonth]);
 
   function toggleSection(section: OpenSection) {
     setOpenSection((currentSection) => (currentSection === section ? "" : section));
@@ -199,7 +249,7 @@ export default function AssistantPage() {
       });
       const result = (await response.json()) as { event?: ParsedEvent; error?: string };
       if (!response.ok || !result.event) {
-        throw new Error(result.error || "AI 解析失敗。");
+        throw new Error(result.error || "AI 解析失敗");
       }
 
       const parsed = result.event;
@@ -207,7 +257,7 @@ export default function AssistantPage() {
         ...emptyEventItem,
         ...defaultEventTimes,
         rotaryYearId: activeYear?.id || "",
-        eventType: parsed.event_type || "例會",
+        eventType: parsed.event_type || "靘?",
         title: parsed.event_name,
         meetingNo: parsed.meeting_no,
         date: parsed.date,
@@ -224,10 +274,10 @@ export default function AssistantPage() {
       };
       setForm(nextForm);
       setWarnings(buildWarnings(nextForm, parsed.warnings));
-      setMessage("AI 已整理完成，請確認後再儲存。");
+      setMessage("AI 已整理活動資訊，請確認後再儲存。");
     } catch (error) {
       console.error(error);
-      setErrorMessage(error instanceof Error ? error.message : "AI 解析失敗。");
+      setErrorMessage(error instanceof Error ? error.message : "AI 解析失敗");
     } finally {
       setIsParsing(false);
     }
@@ -240,7 +290,7 @@ export default function AssistantPage() {
     const requiredWarnings = buildRequiredWarnings(form);
     setWarnings(mergeWarnings(warnings, requiredWarnings));
     if (requiredWarnings.length > 0) {
-      setErrorMessage("仍有欄位需要確認，請補齊或確認後再儲存。");
+      setErrorMessage("請先補齊必要欄位，再儲存活動。");
       return;
     }
 
@@ -255,15 +305,15 @@ export default function AssistantPage() {
           eventItem.meetingNo === form.meetingNo
       );
       if (duplicatedEvent) {
-        setErrorMessage(`已有相同日期及例會次數的活動：${duplicatedEvent.title}`);
+        setErrorMessage(`同日期同例會次數已存在活動：${duplicatedEvent.title}`);
         return;
       }
 
       await upsertEvent({ ...form, id: crypto.randomUUID() });
-      setMessage("已確認並新增活動到年度行事曆。");
+      setMessage("活動已儲存。");
     } catch (error) {
       console.error(error);
-      setErrorMessage(error instanceof Error ? `新增活動失敗：${error.message}` : "新增活動失敗");
+      setErrorMessage(error instanceof Error ? `活動儲存失敗：${error.message}` : "活動儲存失敗");
     } finally {
       setIsSaving(false);
     }
@@ -285,10 +335,91 @@ export default function AssistantPage() {
         .filter((row) => row.balance > 0)
         .sort((firstRow, secondRow) => secondRow.balance - firstRow.balance);
       setUnpaidRows(rows);
-      setMessage(`已查詢 ${unpaidMonth} 未繳社費。`);
+      setMessage(`已查詢 ${unpaidMonth} 未匯款社費。`);
     } catch (error) {
       console.error(error);
-      setErrorMessage(getErrorMessage(error, "未繳社費查詢失敗"));
+      setErrorMessage(getErrorMessage(error, "未匯款社費查詢失敗"));
+    }
+  }
+
+  async function queryMemberDuesRange() {
+    setErrorMessage("");
+    setMessage("");
+
+    if (!selectedMemberId) {
+      setErrorMessage("請先選擇社友。");
+      return;
+    }
+    if (!memberDuesStartMonth || !memberDuesEndMonth) {
+      setErrorMessage("請選擇起始月份與結束月份。");
+      return;
+    }
+    if (memberDuesStartMonth > memberDuesEndMonth) {
+      setErrorMessage("起始月份不可晚於結束月份。");
+      return;
+    }
+
+    try {
+      const [loadedMembers, records] = await Promise.all([
+        members.length > 0 ? Promise.resolve(members) : fetchMembers(),
+        fetchDuesRecords(),
+      ]);
+      if (members.length === 0) setMembers(loadedMembers);
+      const member = loadedMembers.find((item) => item.id === selectedMemberId);
+      const rows = buildMemberDuesRows(
+        records,
+        loadedMembers,
+        selectedMemberId,
+        memberDuesStartMonth,
+        memberDuesEndMonth
+      );
+      setMemberDuesRows(rows);
+      setExpandedMemberDuesMonths([]);
+      setMessage(
+        `已查詢 ${member ? formatMemberName(member) : "社友"} ${memberDuesStartMonth} 至 ${memberDuesEndMonth} 社費明細。`
+      );
+    } catch (error) {
+      console.error(error);
+      setErrorMessage(getErrorMessage(error, "社友個人社費明細查詢失敗"));
+    }
+  }
+
+  function toggleMemberDuesMonth(recordId: string) {
+    setExpandedMemberDuesMonths((currentIds) =>
+      currentIds.includes(recordId)
+        ? currentIds.filter((id) => id !== recordId)
+        : [...currentIds, recordId]
+    );
+  }
+
+  async function exportMemberDuesRangeJpg() {
+    if (!selectedMemberId) {
+      setErrorMessage("請先選擇社友。");
+      return;
+    }
+    if (filteredMemberDuesRows.length === 0) {
+      setErrorMessage("目前沒有可匯出的社費明細。");
+      return;
+    }
+
+    const member = members.find((item) => item.id === selectedMemberId);
+    const memberName = member ? formatMemberName(member) : "未知社友";
+    const element = createMemberRangeExportElement(
+      memberName,
+      memberDuesStartMonth,
+      memberDuesEndMonth,
+      filteredMemberDuesRows
+    );
+    try {
+      await downloadMemberRangeJpg(
+        element,
+        `高雄晨光扶輪社_社費明細_${sanitizeFilename(memberName).replaceAll("_", "")}_${memberDuesStartMonth}至${memberDuesEndMonth}.jpg`
+      );
+    } catch (error) {
+      console.error(error);
+      setErrorMessage(getErrorMessage(error, "區間社費明細 JPG 匯出失敗"));
+    } finally {
+      element.remove();
     }
   }
 
@@ -368,7 +499,7 @@ export default function AssistantPage() {
     const nextRecords = [...latestRecords];
 
     for (const [index, row] of confirmedRows.entries()) {
-      setBatchProgress(`正在建立 ${index + 1} / ${confirmedRows.length}`);
+      setBatchProgress(`甇?撱箇? ${index + 1} / ${confirmedRows.length}`);
       const alreadyExists = nextRecords.some(
         (record) => record.memberId === row.member.id && record.periodMonth === batchMonth
       );
@@ -395,7 +526,7 @@ export default function AssistantPage() {
     );
     setBatchProgress("");
     setBatchMessage(
-      `批次建立完成：成功 ${successCount} 筆，已有紀錄略過 ${skippedCount} 筆，失敗 ${failedCount} 筆。`
+      `批次建立完成：新增 ${successCount} 筆，已存在略過 ${skippedCount} 筆，失敗 ${failedCount} 筆。`
     );
   }
 
@@ -420,10 +551,10 @@ export default function AssistantPage() {
           balance: getDisplayDuesBalance(record),
         }));
       setSummaryRows(rows);
-      setBatchMessage(`已載入 ${summaryMonth} 全體應繳費用總表。`);
+      setBatchMessage(`已載入 ${summaryMonth} 全體社友本期應繳費用總表。`);
     } catch (error) {
       console.error(error);
-      setErrorMessage(getErrorMessage(error, "全體應繳總表讀取失敗"));
+      setErrorMessage(getErrorMessage(error, "本期應繳費用總表讀取失敗"));
     }
   }
 
@@ -435,26 +566,75 @@ export default function AssistantPage() {
     setErrorMessage("");
   }
 
+  async function loadBatchExportMembers() {
+    setErrorMessage("");
+    setBatchMessage("");
+    setBatchProgress("");
+
+    if (!batchExportStartMonth || !batchExportEndMonth) {
+      setErrorMessage("請選擇批次匯出的起始月份與結束月份。");
+      return [];
+    }
+    if (batchExportStartMonth > batchExportEndMonth) {
+      setErrorMessage("批次匯出起始月份不可晚於結束月份。");
+      return [];
+    }
+
+    try {
+      const [loadedMembers, records] = await Promise.all([
+        members.length > 0 ? Promise.resolve(members) : fetchMembers(),
+        fetchDuesRecords(),
+      ]);
+      if (members.length === 0) setMembers(loadedMembers);
+      const bundles = buildMemberDuesBundles(
+        loadedMembers,
+        records,
+        batchExportStartMonth,
+        batchExportEndMonth,
+        includeNoRecordMembers
+      );
+      setBatchExportBundles(bundles);
+      setBatchMessage(`已載入 ${bundles.length} 位社友可匯出區間社費明細。`);
+      return bundles;
+    } catch (error) {
+      console.error(error);
+      setErrorMessage(getErrorMessage(error, "批次匯出名單載入失敗"));
+      return [];
+    }
+  }
+
   async function exportBatchJpg() {
-    if (summaryRows.length === 0) {
-      setErrorMessage("請先載入本月全體社友應繳費用總表。");
+    const bundles =
+      batchExportBundles.length > 0 ? batchExportBundles : await loadBatchExportMembers();
+    if (bundles.length === 0) {
+      setErrorMessage("目前沒有可匯出的社費明細。");
       return;
     }
 
-    const confirmed = window.confirm(`即將產出 ${summaryRows.length} 位社友的個人社費通知 JPG。`);
+    const confirmed = window.confirm(
+      `即將逐張下載 ${bundles.length} 位社友的區間社費明細 JPG。若瀏覽器阻擋多檔下載，請允許本網站下載多個檔案。`
+    );
     if (!confirmed) return;
 
-    setBatchMessage("瀏覽器可能阻擋多檔下載，請允許此網站下載多個檔案。");
+    setBatchMessage("開始逐張產出 JPG。若瀏覽器跳出多檔下載提醒，請選擇允許。");
 
-    for (const [index, row] of summaryRows.entries()) {
-      setBatchProgress(`正在產出 ${index + 1} / ${summaryRows.length}`);
-      const memberName = row.member ? formatMemberName(row.member) : "未知社友";
-      const element = createStatementExportElement(row.record, memberName);
+    for (const [index, bundle] of bundles.entries()) {
+      setBatchProgress(`正在產出 ${index + 1} / ${bundles.length}`);
+      const memberName = formatMemberName(bundle.member);
+      const element = createMemberRangeExportElement(
+        memberName,
+        batchExportStartMonth,
+        batchExportEndMonth,
+        bundle.rows
+      );
       try {
-        await downloadStatementJpg(element, row.record, memberName);
+        await downloadMemberRangeJpg(
+          element,
+          `高雄晨光扶輪社_社費明細_${sanitizeFilename(memberName).replaceAll("_", "")}_${batchExportStartMonth}至${batchExportEndMonth}.jpg`
+        );
       } catch (error) {
         console.error(error);
-        setErrorMessage(getErrorMessage(error, "批次 JPG 匯出發生錯誤"));
+        setErrorMessage(getErrorMessage(error, "批次 JPG 匯出失敗"));
       } finally {
         element.remove();
       }
@@ -462,6 +642,7 @@ export default function AssistantPage() {
     }
 
     setBatchProgress("");
+    setBatchMessage(`已完成 ${bundles.length} 位社友區間社費明細 JPG 匯出。`);
   }
 
   return (
@@ -486,16 +667,14 @@ export default function AssistantPage() {
       <section className="mx-auto max-w-md space-y-6">
         <header className="space-y-3">
           <Link href="/" className="text-sm font-bold text-[#173B73]/75">
-            回首頁
-          </Link>
+            ????          </Link>
           <div>
             <p className="text-sm font-bold tracking-[0.18em] text-[#C99700]">
               Rotary OS
             </p>
-            <h1 className="mt-2 text-3xl font-bold">Jade AI 助理</h1>
+            <h1 className="mt-2 text-3xl font-bold">Jade AI ?拍?</h1>
             <p className="mt-2 text-sm font-semibold text-[#173B73]/70">
-              智慧整理活動、查詢未繳社費，並協助每月社費批次作業。
-            </p>
+              ?箸?渡?瘣餃??閰Ｘ蝜喟冗鞎鳴?銝血??拇??冗鞎餅甈∩?璆准?            </p>
           </div>
         </header>
 
@@ -511,13 +690,13 @@ export default function AssistantPage() {
         ) : null}
 
         <AssistantSection
-          title="智慧建立活動"
+          title="?箸撱箇?瘣餃?"
           isOpen={openSection === "event"}
           onToggle={() => toggleSection("event")}
         >
           <section className="space-y-4">
             <label className="block">
-              <span className="text-sm font-bold">活動文字輸入</span>
+              <span className="text-sm font-bold">瘣餃???頛詨</span>
               <textarea
                 value={inputText}
                 onChange={(event) => setInputText(event.target.value)}
@@ -534,21 +713,21 @@ export default function AssistantPage() {
                 disabled={isParsing || inputText.trim() === ""}
                 className={`rounded-2xl bg-[#F7C948] py-4 font-bold disabled:opacity-60 ${buttonShadow}`}
               >
-                {isParsing ? "整理中..." : "AI 整理活動"}
+                {isParsing ? "?渡?銝?.." : "AI ?渡?瘣餃?"}
               </button>
               <button
                 type="button"
                 onClick={clearAll}
                 className={`rounded-2xl bg-white py-4 font-bold ${buttonShadow}`}
               >
-                清除
+                皜
               </button>
             </div>
 
             <form onSubmit={handleSave} className="space-y-4">
               <div>
-                <p className="text-sm font-bold text-[#C99700]">確認後新增活動</p>
-                <h2 className="mt-1 text-2xl font-bold">AI 整理結果</h2>
+                <p className="text-sm font-bold text-[#C99700]">活動整理結果</p>
+                <h2 className="mt-1 text-2xl font-bold">AI 整理欄位</h2>
               </div>
 
               {warnings.length > 0 ? (
@@ -566,7 +745,7 @@ export default function AssistantPage() {
                   onChange={(event) => updateField("rotaryYearId", event.target.value)}
                   className="mt-2 w-full rounded-2xl border border-[#E5D9BD] bg-white px-4 py-3 outline-none focus:border-[#173B73] focus:ring-2 focus:ring-[#F7C948]"
                 >
-                  <option value="">未指定年度</option>
+                  <option value="">請選擇年度</option>
                   {years.map((year) => (
                     <option key={year.id} value={year.id}>
                       {year.displayName || year.name}
@@ -586,7 +765,7 @@ export default function AssistantPage() {
               </div>
               <AssistantInput label="地點" value={form.location} onChange={(value) => updateField("location", value)} />
               <AssistantInput label="主講人" value={form.speaker} onChange={(value) => updateField("speaker", value)} />
-              <AssistantInput label="講題" value={form.topic} onChange={(value) => updateField("topic", value)} />
+              <AssistantInput label="主題" value={form.topic} onChange={(value) => updateField("topic", value)} />
               <AssistantInput label="聯誼長" value={form.fellowshipChair} onChange={(value) => updateField("fellowshipChair", value)} />
               <AssistantInput label="糾察長" value={form.sergeantAtArms} onChange={(value) => updateField("sergeantAtArms", value)} />
               <AssistantTextarea label="活動說明" value={form.description} onChange={(value) => updateField("description", value)} />
@@ -597,14 +776,14 @@ export default function AssistantPage() {
                 disabled={isSaving}
                 className={`w-full rounded-2xl bg-[#F7C948] py-4 font-bold disabled:opacity-60 ${buttonShadow}`}
               >
-                {isSaving ? "新增中..." : "確認新增活動"}
+                {isSaving ? "?啣?銝?.." : "蝣箄??啣?瘣餃?"}
               </button>
             </form>
           </section>
         </AssistantSection>
 
         <AssistantSection
-          title="未繳社費查詢"
+          title="?芰像蝷曇祥?亥岷"
           isOpen={openSection === "unpaid"}
           onToggle={() => toggleSection("unpaid")}
         >
@@ -620,7 +799,7 @@ export default function AssistantPage() {
             </label>
             <div className="grid grid-cols-2 gap-3">
               <button type="button" onClick={queryUnpaidRecords} className={`rounded-2xl bg-[#F7C948] py-3 font-bold ${buttonShadow}`}>
-                重新查詢
+                查詢
               </button>
               <button type="button" onClick={() => exportUnpaidCsv(unpaidMonth, unpaidRows)} className={`rounded-2xl bg-white py-3 font-bold ${buttonShadow}`}>
                 匯出 CSV
@@ -628,8 +807,8 @@ export default function AssistantPage() {
             </div>
             <div className="rounded-2xl bg-[#F8F3E8] p-4 font-bold">
               <p>查詢月份：{unpaidMonth || "-"}</p>
-              <p>未繳社友人數：{unpaidRows.length}</p>
-              <p>尚欠總額：{formatCurrency(unpaidTotal)}</p>
+              <p>未匯款社友人數：{unpaidRows.length}</p>
+              <p>本期應繳總額：{formatCurrency(unpaidTotal)}</p>
             </div>
             <div className="space-y-3">
               {unpaidRows.map((row) => (
@@ -640,7 +819,7 @@ export default function AssistantPage() {
                         {row.member?.chineseName || "未知社友"} {row.member?.rotaryName || ""}
                       </p>
                       <p>前期未繳：{formatCurrency(row.record.previousBalance)}</p>
-                      <p>本期社費：{formatCurrency(row.record.currentDue)}</p>
+                      <p>本期應繳：{formatCurrency(row.record.currentDue)}</p>
                       <p>已繳費用：{formatCurrency(row.record.paidAmount)}</p>
                       <p>繳費方式：{row.record.paymentMethod}</p>
                       <p>繳費日期：{row.record.paymentDate || "-"}</p>
@@ -656,7 +835,149 @@ export default function AssistantPage() {
         </AssistantSection>
 
         <AssistantSection
-          title="每月社費批次作業"
+          title="社友個人社費明細"
+          isOpen={openSection === "memberDues"}
+          onToggle={() => toggleSection("memberDues")}
+        >
+          <div className="space-y-4">
+            <div className="space-y-3 rounded-2xl bg-[#F8F3E8] p-4">
+              <label className="block">
+                <span className="text-sm font-bold">搜尋社友</span>
+                <input
+                  value={memberSearch}
+                  onChange={(event) => setMemberSearch(event.target.value)}
+                  placeholder="輸入中文姓名或社名"
+                  className="mt-2 w-full rounded-2xl border border-[#E5D9BD] bg-white px-4 py-3 text-base outline-none focus:border-[#173B73] focus:ring-2 focus:ring-[#F7C948]"
+                />
+              </label>
+              <label className="block">
+                <span className="text-sm font-bold">社友</span>
+                <select
+                  value={selectedMemberId}
+                  onChange={(event) => setSelectedMemberId(event.target.value)}
+                  className="mt-2 w-full rounded-2xl border border-[#E5D9BD] bg-white px-4 py-3 text-base outline-none focus:border-[#173B73] focus:ring-2 focus:ring-[#F7C948]"
+                >
+                  <option value="">請選擇社友</option>
+                  {searchedMembers.map((member) => (
+                    <option key={member.id} value={member.id}>
+                      {formatMemberName(member)}
+                    </option>
+                  ))}
+                </select>
+              </label>
+              <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
+                <label className="block">
+                  <span className="text-sm font-bold">起始月份</span>
+                  <input
+                    type="month"
+                    value={memberDuesStartMonth}
+                    onChange={(event) => setMemberDuesStartMonth(event.target.value)}
+                    className="mt-2 w-full rounded-2xl border border-[#E5D9BD] bg-white px-4 py-3 text-base outline-none focus:border-[#173B73] focus:ring-2 focus:ring-[#F7C948]"
+                  />
+                </label>
+                <label className="block">
+                  <span className="text-sm font-bold">結束月份</span>
+                  <input
+                    type="month"
+                    value={memberDuesEndMonth}
+                    onChange={(event) => setMemberDuesEndMonth(event.target.value)}
+                    className="mt-2 w-full rounded-2xl border border-[#E5D9BD] bg-white px-4 py-3 text-base outline-none focus:border-[#173B73] focus:ring-2 focus:ring-[#F7C948]"
+                  />
+                </label>
+              </div>
+              <label className="block">
+                <span className="text-sm font-bold">結果篩選</span>
+                <select
+                  value={memberDuesFilter}
+                  onChange={(event) => setMemberDuesFilter(event.target.value as MemberDuesFilter)}
+                  className="mt-2 w-full rounded-2xl border border-[#E5D9BD] bg-white px-4 py-3 text-base outline-none focus:border-[#173B73] focus:ring-2 focus:ring-[#F7C948]"
+                >
+                  <option value="all">全部月份</option>
+                  <option value="unpaid">未匯款月份</option>
+                  <option value="paid">已繳清月份</option>
+                </select>
+              </label>
+              <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
+                <button type="button" onClick={queryMemberDuesRange} className={`rounded-2xl bg-[#F7C948] py-3 font-bold ${buttonShadow}`}>
+                  查詢社費明細
+                </button>
+                <button type="button" onClick={() => void exportMemberDuesRangeJpg()} className={`rounded-2xl bg-white py-3 font-bold ${buttonShadow}`}>
+                  匯出區間社費明細 JPG
+                </button>
+              </div>
+            </div>
+
+            {memberDuesRows.length > 0 ? (
+              <div className="rounded-2xl bg-white p-4 text-sm font-bold">
+                <p>查詢月份數：{filteredMemberDuesRows.length}</p>
+                <p>前期未繳合計：{formatCurrency(memberDuesTotals.previousBalance)}</p>
+                <p>餐費合計：{formatCurrency(memberDuesTotals.meal)}</p>
+                <p>常年費合計：{formatCurrency(memberDuesTotals.annualFee)}</p>
+                <p>特別捐合計：{formatCurrency(memberDuesTotals.specialDonation)}</p>
+                <p>紅箱合計：{formatCurrency(memberDuesTotals.redBox)}</p>
+                <p>扶輪基金合計：{formatCurrency(memberDuesTotals.rotaryFoundation)}</p>
+                <p>代收付合計：{formatCurrency(memberDuesTotals.passThrough)}</p>
+                <p>本期應繳合計：{formatCurrency(memberDuesTotals.currentDue)}</p>
+                <p>已繳費用合計：{formatCurrency(memberDuesTotals.paidAmount)}</p>
+                <p>尚未繳清合計：{formatCurrency(memberDuesTotals.balance)}</p>
+              </div>
+            ) : null}
+
+            <div className="space-y-3">
+              {filteredMemberDuesRows.map((row) => {
+                const isExpanded = expandedMemberDuesMonths.includes(row.record.id);
+                const status = row.balance > 0 ? "未匯款" : "已繳清";
+                return (
+                  <article key={row.record.id} className="rounded-2xl bg-white p-4 text-sm">
+                    <button
+                      type="button"
+                      onClick={() => toggleMemberDuesMonth(row.record.id)}
+                      className="w-full text-left"
+                    >
+                      <div className="flex items-start justify-between gap-3">
+                        <div className="min-w-0 font-bold">
+                          <p className="text-lg">{row.record.periodMonth}</p>
+                          <p>本期應繳：{formatCurrency(row.currentDue)}</p>
+                          <p>已繳費用：{formatCurrency(row.record.paidAmount)}</p>
+                          <p>本期應繳餘額：{formatCurrency(row.balance)}</p>
+                        </div>
+                        <span className={`shrink-0 rounded-full px-3 py-1 text-xs font-bold text-white ${row.balance > 0 ? "bg-[#F47C6C]" : "bg-[#173B73]"}`}>
+                          {status}
+                        </span>
+                      </div>
+                    </button>
+                    {isExpanded ? (
+                      <div className="mt-3 space-y-3 border-t border-[#E5D9BD] pt-3 font-semibold">
+                        <div className="grid grid-cols-2 gap-2">
+                          <p>前期未繳：{formatCurrency(row.record.previousBalance)}</p>
+                          <p>餐費：{formatCurrency(row.meal)}</p>
+                          <p>常年費：{formatCurrency(row.annualFee)}</p>
+                          <p>特別捐：{formatCurrency(row.specialDonation)}</p>
+                          <p>紅箱：{formatCurrency(row.redBox)}</p>
+                          <p>扶輪基金：{formatCurrency(row.rotaryFoundation)}</p>
+                          <p>代收付：{formatCurrency(row.passThrough)}</p>
+                          <p>繳費方式：{row.record.paymentMethod}</p>
+                          <p>繳費日期：{row.record.paymentDate || "-"}</p>
+                        </div>
+                        <div className="space-y-2">
+                          <p className="font-bold">本期社費明細</p>
+                          {getStatementLineItems(row.record).map((item) => (
+                            <div key={item.id} className="rounded-xl bg-[#F8F3E8] p-3">
+                              <p>{item.label}：{formatCurrency(item.amount)}</p>
+                              <p className="text-xs text-[#173B73]/75">{item.description || "舊資料總額"}</p>
+                            </div>
+                          ))}
+                        </div>
+                      </div>
+                    ) : null}
+                  </article>
+                );
+              })}
+            </div>
+          </div>
+        </AssistantSection>
+        <AssistantSection
+          title="瘥?蝷曇祥?寞活雿平"
           isOpen={openSection === "batch"}
           onToggle={() => toggleSection("batch")}
         >
@@ -673,9 +994,9 @@ export default function AssistantPage() {
             ) : null}
 
             <section className="space-y-3 rounded-2xl bg-[#F8F3E8] p-4">
-              <h2 className="text-xl font-bold">建立全體社友社費</h2>
+              <h2 className="text-xl font-bold">撱箇??券?蝷曉?蝷曇祥</h2>
               <label className="block">
-                <span className="text-sm font-bold">批次月份</span>
+                <span className="text-sm font-bold">?寞活?遢</span>
                 <input
                   type="month"
                   value={batchMonth}
@@ -684,7 +1005,7 @@ export default function AssistantPage() {
                 />
               </label>
               <button type="button" onClick={buildBatchPreview} className={`w-full rounded-2xl bg-[#F7C948] py-3 font-bold ${buttonShadow}`}>
-                建立全體社友社費
+                撱箇??券?蝷曉?蝷曇祥
               </button>
               {batchRows.length > 0 ? (
                 <div className="space-y-3">
@@ -709,7 +1030,7 @@ export default function AssistantPage() {
                           <div className="flex shrink-0 flex-col items-end gap-2">
                             {row.exists ? (
                               <span className="rounded-full bg-[#173B73] px-3 py-1 text-xs font-bold text-white">
-                                已有紀錄
+                                已存在
                               </span>
                             ) : null}
                             {row.leavePeriod ? (
@@ -728,11 +1049,11 @@ export default function AssistantPage() {
                           <MoneyInput label="扶輪基金" value={row.rotaryFoundation} onChange={(value) => updateBatchMoney(row.member.id, "rotaryFoundation", value)} />
                           <MoneyInput label="代收付" value={row.passThrough} onChange={(value) => updateBatchMoney(row.member.id, "passThrough", value)} />
                           <div className="rounded-2xl bg-[#F8F3E8] px-3 py-2 font-bold">
-                            <p>本期應繳</p>
+                            <p>本期社費總計</p>
                             <p>{formatCurrency(currentDue)}</p>
                           </div>
                           <div className="rounded-2xl bg-[#F8F3E8] px-3 py-2 font-bold">
-                            <p>預計尚欠</p>
+                            <p>預計本期應繳</p>
                             <p>{formatCurrency(expectedBalance)}</p>
                           </div>
                         </div>
@@ -740,16 +1061,16 @@ export default function AssistantPage() {
                     );
                   })}
                   <button type="button" onClick={confirmCreateBatch} className={`w-full rounded-2xl bg-[#F7C948] py-4 font-bold ${buttonShadow}`}>
-                    確認建立全體社費
+                    蝣箄?撱箇??券?蝷曇祥
                   </button>
                 </div>
               ) : null}
             </section>
 
             <section className="space-y-3 rounded-2xl bg-[#F8F3E8] p-4">
-              <h2 className="text-xl font-bold">本月全體社友應繳費用總表</h2>
+              <h2 className="text-xl font-bold">?祆??券?蝷曉??像鞎餌蝮質”</h2>
               <label className="block">
-                <span className="text-sm font-bold">總表月份</span>
+                <span className="text-sm font-bold">蝮質”?遢</span>
                 <input
                   type="month"
                   value={summaryMonth}
@@ -759,25 +1080,74 @@ export default function AssistantPage() {
               </label>
               <div className="grid grid-cols-2 gap-3">
                 <button type="button" onClick={loadMonthlySummary} className={`rounded-2xl bg-[#F7C948] py-3 font-bold ${buttonShadow}`}>
-                  預覽
+                  ?汗
                 </button>
                 <button type="button" onClick={() => exportSummaryCsv(summaryMonth, summaryRows)} className={`rounded-2xl bg-white py-3 font-bold ${buttonShadow}`}>
-                  匯出 CSV
+                  ?臬 CSV
                 </button>
                 <button type="button" onClick={() => window.print()} className={`rounded-2xl bg-white py-3 font-bold ${buttonShadow}`}>
-                  列印
+                  ?
                 </button>
-                <button type="button" onClick={() => void exportBatchJpg()} className={`rounded-2xl bg-[#F7C948] py-3 font-bold ${buttonShadow}`}>
-                  批次匯出個人通知 JPG
-                </button>
+              </div>
+              <div className="space-y-3 rounded-2xl bg-white p-4">
+                <h3 className="font-bold">批次個人通知區間匯出</h3>
+                <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
+                  <label className="block">
+                    <span className="text-sm font-bold">起始月份</span>
+                    <input
+                      type="month"
+                      value={batchExportStartMonth}
+                      onChange={(event) => {
+                        setBatchExportStartMonth(event.target.value);
+                        setBatchExportBundles([]);
+                      }}
+                      className="mt-2 w-full rounded-2xl border border-[#E5D9BD] bg-white px-4 py-3 outline-none focus:border-[#173B73] focus:ring-2 focus:ring-[#F7C948]"
+                    />
+                  </label>
+                  <label className="block">
+                    <span className="text-sm font-bold">結束月份</span>
+                    <input
+                      type="month"
+                      value={batchExportEndMonth}
+                      onChange={(event) => {
+                        setBatchExportEndMonth(event.target.value);
+                        setBatchExportBundles([]);
+                      }}
+                      className="mt-2 w-full rounded-2xl border border-[#E5D9BD] bg-white px-4 py-3 outline-none focus:border-[#173B73] focus:ring-2 focus:ring-[#F7C948]"
+                    />
+                  </label>
+                </div>
+                <label className="flex items-center gap-2 text-sm font-bold">
+                  <input
+                    type="checkbox"
+                    checked={includeNoRecordMembers}
+                    onChange={(event) => {
+                      setIncludeNoRecordMembers(event.target.checked);
+                      setBatchExportBundles([]);
+                    }}
+                  />
+                  包含無紀錄社友
+                </label>
+                <p className="text-sm font-bold">即將匯出人數：{batchExportBundles.length}</p>
+                <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
+                  <button type="button" onClick={() => void loadBatchExportMembers()} className={`rounded-2xl bg-white py-3 font-bold ${buttonShadow}`}>
+                    載入區間匯出名單
+                  </button>
+                  <button type="button" onClick={() => void exportBatchJpg()} className={`rounded-2xl bg-[#F7C948] py-3 font-bold ${buttonShadow}`}>
+                    批次匯出全體社友區間明細 JPG
+                  </button>
+                </div>
+                <p className="text-xs font-bold text-[#173B73]/70">
+                  若瀏覽器阻擋多檔下載，請允許本網站下載多個檔案。
+                </p>
               </div>
               <div id="monthly-dues-summary" className="overflow-x-auto rounded-2xl bg-white p-4">
                 <h3 className="text-center text-lg font-bold">高雄晨光扶輪社</h3>
-                <p className="mt-1 text-center font-bold">{formatSummaryTitleMonth(summaryMonth)}社友應繳費用總表</p>
+                <p className="mt-1 text-center font-bold">{formatSummaryTitleMonth(summaryMonth)}全體社友本期應繳費用總表</p>
                 <table className="mt-4 min-w-[920px] w-full border-collapse text-sm">
                   <thead>
                     <tr className="bg-[#F8F3E8]">
-                      {["社友姓名", "社名", "前期未繳", "餐費", "常年費", "特別捐", "紅箱", "扶輪基金", "代收付", "本期應繳", "已繳費用", "尚欠金額"].map((header) => (
+                      {["社友姓名", "社名", "前期未繳", "餐費", "常年費", "特別捐", "紅箱", "扶輪基金", "代收付", "本期社費總計", "已繳費用", "本期應繳"].map((header) => (
                         <th key={header} className="border border-[#173B73]/25 px-2 py-2 text-left">{header}</th>
                       ))}
                     </tr>
@@ -800,7 +1170,7 @@ export default function AssistantPage() {
                       </tr>
                     ))}
                     <tr className="font-bold">
-                      <td className="border border-[#173B73]/20 px-2 py-2" colSpan={2}>合計：{summaryTotals.memberCount} 人</td>
+                      <td className="border border-[#173B73]/20 px-2 py-2" colSpan={2}>合計：{summaryTotals.memberCount} 位</td>
                       <td className="border border-[#173B73]/20 px-2 py-2 text-right">{formatCurrency(summaryTotals.previousBalance)}</td>
                       <td className="border border-[#173B73]/20 px-2 py-2 text-right">{formatCurrency(summaryTotals.meal)}</td>
                       <td className="border border-[#173B73]/20 px-2 py-2 text-right">{formatCurrency(summaryTotals.annualFee)}</td>
@@ -838,7 +1208,7 @@ function AssistantSection({
     <section className="rounded-3xl bg-white/85 p-5 shadow-[8px_8px_20px_rgba(0,0,0,0.12),-8px_-8px_20px_rgba(255,255,255,0.9)]">
       <button type="button" onClick={onToggle} className="flex w-full items-center justify-between gap-3 text-left">
         <h2 className="text-xl font-bold">{title}</h2>
-        <span className="shrink-0 text-sm font-bold">{isOpen ? "▼ 收合" : "▶ 展開"}</span>
+        <span className="shrink-0 text-sm font-bold">{isOpen ? "???嗅?" : "??撅?"}</span>
       </button>
       {isOpen ? <div className="mt-5">{children}</div> : null}
     </section>
@@ -922,10 +1292,10 @@ function buildWarnings(eventItem: Omit<EventItem, "id">, aiWarnings: string[]) {
 
 function buildRequiredWarnings(eventItem: Omit<EventItem, "id">) {
   const warnings = new Set<string>();
-  if (!eventItem.rotaryYearId) warnings.add("尚未選擇年度。");
-  if (!eventItem.date) warnings.add("尚未確認活動日期。");
-  if (!eventItem.title) warnings.add("尚未確認活動名稱。");
-  if (!eventItem.location) warnings.add("尚未確認地點。");
+  if (!eventItem.rotaryYearId) warnings.add("請選擇年度");
+  if (!eventItem.date) warnings.add("請填寫活動日期");
+  if (!eventItem.title) warnings.add("請填寫活動名稱");
+  if (!eventItem.location) warnings.add("請填寫活動地點");
   return Array.from(warnings);
 }
 
@@ -937,6 +1307,15 @@ function getPreviousMonth() {
   const date = new Date();
   date.setMonth(date.getMonth() - 1);
   return `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, "0")}`;
+}
+
+function getCurrentMonth() {
+  const date = new Date();
+  return `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, "0")}`;
+}
+
+function getRotaryYearStartMonth(year: RotaryYear | undefined, fallbackMonth: string) {
+  return year?.startDate ? year.startDate.slice(0, 7) : fallbackMonth;
 }
 
 function findPreviousBalance(memberId: string, targetMonth: string, records: DuesRecord[]) {
@@ -966,7 +1345,7 @@ function buildDuesRecordFromBatchRow(row: BatchRow, periodMonth: string): DuesRe
     periodMonth,
     previousBalance: row.previousBalance,
     currentDue: getBatchCurrentDue(row),
-    paymentMethod: "轉帳" as PaymentMethod,
+    paymentMethod: "頧董" as PaymentMethod,
     createdAt: new Date().toISOString(),
     lineItems,
   };
@@ -979,7 +1358,7 @@ function buildBatchLineItems(row: BatchRow): DuesLineItem[] {
   addBatchLineItem(items, "annual_fee", "常年費", row.annualFee, createdAt);
   addBatchLineItem(items, "special_donation", "特別捐", row.specialDonation, createdAt);
   addBatchLineItem(items, "red_box", "紅箱", row.redBox, createdAt);
-  addBatchLineItem(items, "rotary_foundation", "扶輪基金（代收）", row.rotaryFoundation, createdAt, "固定 NT$270，可由秘書調整");
+  addBatchLineItem(items, "rotary_foundation", "扶輪基金（代收）", row.rotaryFoundation, createdAt, "固定 NT$270");
   addBatchLineItem(items, "pass_through", "代收付", row.passThrough, createdAt);
   return items;
 }
@@ -1044,11 +1423,64 @@ function calculateSummaryTotals(rows: SummaryRow[]) {
   );
 }
 
+function buildMemberDuesRows(
+  records: DuesRecord[],
+  members: Member[],
+  memberId: string,
+  startMonth: string,
+  endMonth: string
+) {
+  return records
+    .filter(
+      (record) =>
+        record.memberId === memberId &&
+        record.periodMonth >= startMonth &&
+        record.periodMonth <= endMonth
+    )
+    .sort((firstRecord, secondRecord) =>
+      firstRecord.periodMonth.localeCompare(secondRecord.periodMonth)
+    )
+    .map((record) => buildSummaryRow(record, members));
+}
+
+function buildMemberDuesBundles(
+  members: Member[],
+  records: DuesRecord[],
+  startMonth: string,
+  endMonth: string,
+  includeNoRecordMembers: boolean
+): MemberDuesRangeBundle[] {
+  return members
+    .map((member) => ({
+      member,
+      rows: buildMemberDuesRows(records, members, member.id, startMonth, endMonth),
+    }))
+    .filter((bundle) => includeNoRecordMembers || bundle.rows.length > 0)
+    .sort((firstBundle, secondBundle) =>
+      formatMemberName(firstBundle.member).localeCompare(formatMemberName(secondBundle.member), "zh-Hant")
+    );
+}
+
+function buildSummaryRow(record: DuesRecord, members: Member[]): SummaryRow {
+  return {
+    record,
+    member: members.find((member) => member.id === record.memberId),
+    meal: sumLineItemType(record, "meal"),
+    annualFee: sumLineItemType(record, "annual_fee"),
+    specialDonation: sumLineItemType(record, "special_donation"),
+    redBox: sumLineItemType(record, "red_box"),
+    rotaryFoundation: sumLineItemType(record, "rotary_foundation"),
+    passThrough: sumLineItemType(record, "pass_through"),
+    currentDue: record.currentDue,
+    balance: getDisplayDuesBalance(record),
+  };
+}
+
 function exportUnpaidCsv(month: string, rows: UnpaidRow[]) {
   const csvRows = [
     ["查詢月份", month],
     [],
-    ["社友姓名", "社名", "前期未繳", "本期社費", "已繳費用", "尚欠金額", "繳費方式", "繳費日期"],
+    ["社友姓名", "社名", "前期未繳", "本期社費", "已繳費用", "本期應繳", "繳費方式", "繳費日期"],
     ...rows.map((row) => [
       row.member?.chineseName || "未知社友",
       row.member?.rotaryName || "",
@@ -1060,15 +1492,15 @@ function exportUnpaidCsv(month: string, rows: UnpaidRow[]) {
       row.record.paymentDate,
     ]),
   ];
-  downloadCsv(`高雄晨光扶輪社_未繳社費_${month}.csv`, csvRows);
+  downloadCsv(`高雄晨光扶輪社_未匯款社費_${month}.csv`, csvRows);
 }
 
 function exportSummaryCsv(month: string, rows: SummaryRow[]) {
   const totals = calculateSummaryTotals(rows);
   const csvRows = [
-    ["高雄晨光扶輪社", `${formatSummaryTitleMonth(month)}社友應繳費用總表`],
+    ["高雄晨光扶輪社", `${formatSummaryTitleMonth(month)}全體社友本期應繳費用總表`],
     [],
-    ["社友姓名", "社名", "前期未繳", "餐費", "常年費", "特別捐", "紅箱", "扶輪基金", "代收付", "本期應繳", "已繳費用", "尚欠金額"],
+    ["社友姓名", "社名", "前期未繳", "餐費", "常年費", "特別捐", "紅箱", "扶輪基金", "代收付", "本期社費總計", "已繳費用", "本期應繳"],
     ...rows.map((row) => [
       row.member?.chineseName || "未知社友",
       row.member?.rotaryName || "",
@@ -1085,7 +1517,7 @@ function exportSummaryCsv(month: string, rows: SummaryRow[]) {
     ]),
     [
       "合計",
-      `${totals.memberCount} 人`,
+      `${totals.memberCount} 位`,
       String(totals.previousBalance),
       String(totals.meal),
       String(totals.annualFee),
@@ -1098,7 +1530,7 @@ function exportSummaryCsv(month: string, rows: SummaryRow[]) {
       String(totals.balance),
     ],
   ];
-  downloadCsv(`高雄晨光扶輪社_社友應繳費用總表_${month}.csv`, csvRows);
+  downloadCsv(`高雄晨光扶輪社_全體社友本期應繳費用總表_${month}.csv`, csvRows);
 }
 
 function downloadCsv(filename: string, rows: string[][]) {
@@ -1114,83 +1546,105 @@ function downloadCsv(filename: string, rows: string[][]) {
   URL.revokeObjectURL(url);
 }
 
-function createStatementExportElement(record: DuesRecord, memberName: string) {
+function createMemberRangeExportElement(
+  memberName: string,
+  startMonth: string,
+  endMonth: string,
+  rows: SummaryRow[]
+) {
   const element = document.createElement("section");
   element.style.position = "fixed";
   element.style.left = "0";
   element.style.top = "0";
   element.style.zIndex = "-1";
   element.style.boxSizing = "border-box";
-  element.style.width = "210mm";
-  element.style.minHeight = "297mm";
-  element.style.padding = "18mm";
+  element.style.width = "1120px";
+  element.style.padding = "48px";
   element.style.backgroundColor = "#ffffff";
   element.style.color = "#000000";
   element.style.fontFamily = '"Noto Sans TC", "Microsoft JhengHei", Arial, sans-serif';
-  element.innerHTML = buildStatementHtml(record, memberName);
+  element.innerHTML = buildMemberRangeHtml(memberName, startMonth, endMonth, rows);
   document.body.appendChild(element);
   return element;
 }
 
-function buildStatementHtml(record: DuesRecord, memberName: string) {
-  const rows = getStatementLineItems(record)
-    .map(
-      (item) => `
-        <tr>
-          <td style="border:1px solid #000;padding:8px;">${escapeHtml(item.label)}</td>
-          <td style="border:1px solid #000;padding:8px;">${escapeHtml(item.description || "-")}</td>
-          <td style="border:1px solid #000;padding:8px;text-align:right;">${formatCurrency(item.amount)}</td>
+function buildMemberRangeHtml(
+  memberName: string,
+  startMonth: string,
+  endMonth: string,
+  rows: SummaryRow[]
+) {
+  const totals = calculateSummaryTotals(rows);
+  const bodyRows =
+    rows.length > 0
+      ? rows
+          .map((row) => {
+            const detail = getStatementLineItems(row.record)
+              .map(
+                (item) =>
+                  `${escapeHtml(item.label)} ${escapeHtml(item.description || "舊資料總額")} ${formatCurrency(item.amount)}`
+              )
+              .join("<br/>");
+            return `
+              <tr>
+                <td style="border:1px solid #000;padding:8px;">${escapeHtml(formatSummaryTitleMonth(row.record.periodMonth))}</td>
+                <td style="border:1px solid #000;padding:8px;text-align:right;">${formatCurrency(row.record.previousBalance)}</td>
+                <td style="border:1px solid #000;padding:8px;">${detail || "舊資料總額"}</td>
+                <td style="border:1px solid #000;padding:8px;text-align:right;">${formatCurrency(row.currentDue)}</td>
+                <td style="border:1px solid #000;padding:8px;text-align:right;">${formatCurrency(row.record.paidAmount)}</td>
+                <td style="border:1px solid #000;padding:8px;text-align:right;">${formatCurrency(row.balance)}</td>
+                <td style="border:1px solid #000;padding:8px;">${escapeHtml(row.record.paymentDate || "-")}</td>
+                <td style="border:1px solid #000;padding:8px;">${escapeHtml(row.record.paymentMethod || "-")}</td>
+                <td style="border:1px solid #000;padding:8px;">${row.balance > 0 ? "未匯款" : "已繳清"}</td>
+              </tr>
+            `;
+          })
+          .join("")
+      : `<tr><td colspan="9" style="border:1px solid #000;padding:16px;text-align:center;">此區間無社費紀錄</td></tr>`;
+
+  return `
+    <div style="text-align:center;border-bottom:2px solid #000;padding-bottom:18px;">
+      <p style="font-size:24px;font-weight:700;margin:0;">高雄晨光扶輪社</p>
+      <h2 style="font-size:32px;font-weight:700;margin:8px 0 0;">社友個人社費繳交明細</h2>
+    </div>
+    <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px 24px;margin-top:24px;font-size:18px;font-weight:700;">
+      <p style="margin:0;">社友：${escapeHtml(memberName || "-")}</p>
+      <p style="margin:0;">查詢區間：${escapeHtml(formatSummaryTitleMonth(startMonth))} ～ ${escapeHtml(formatSummaryTitleMonth(endMonth))}</p>
+      <p style="margin:0;">產出日期：${formatTaiwanDate(new Date())}</p>
+      <p style="margin:0;">查詢月份數：${rows.length}</p>
+    </div>
+    <table style="width:100%;border-collapse:collapse;margin-top:24px;font-size:14px;line-height:1.45;">
+      <thead>
+        <tr style="background:#f2f2f2;">
+          <th style="border:1px solid #000;padding:8px;text-align:left;">月份</th>
+          <th style="border:1px solid #000;padding:8px;text-align:right;">前期未繳</th>
+          <th style="border:1px solid #000;padding:8px;text-align:left;">本期社費明細</th>
+          <th style="border:1px solid #000;padding:8px;text-align:right;">本期應繳</th>
+          <th style="border:1px solid #000;padding:8px;text-align:right;">已繳費用</th>
+          <th style="border:1px solid #000;padding:8px;text-align:right;">本期應繳餘額</th>
+          <th style="border:1px solid #000;padding:8px;text-align:left;">繳費日期</th>
+          <th style="border:1px solid #000;padding:8px;text-align:left;">繳費方式</th>
+          <th style="border:1px solid #000;padding:8px;text-align:left;">狀態</th>
         </tr>
-      `
-    )
-    .join("");
-  return `
-    <div style="border-bottom:2px solid #000;padding-bottom:20px;text-align:center;">
-      <p style="font-size:20pt;font-weight:700;margin:0;">高雄晨光扶輪社</p>
-      <h2 style="font-size:26pt;font-weight:700;margin:8px 0 0;">社費繳費通知</h2>
-      <p style="font-size:15pt;margin:8px 0 0;">${escapeHtml(formatStatementMonth(record.periodMonth))}社費繳費通知</p>
-    </div>
-    <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px 32px;margin-top:32px;font-size:13pt;">
-      ${statementFieldHtml("社友姓名／社名", memberName || "未指定社友")}
-      ${statementFieldHtml("計費月份", formatStatementMonth(record.periodMonth))}
-      ${statementFieldHtml("前期未繳", formatCurrency(record.previousBalance))}
-      ${statementFieldHtml("本期社費總計", formatCurrency(record.currentDue))}
-      ${statementFieldHtml("已繳費用", formatCurrency(record.paidAmount))}
-      ${statementFieldHtml("尚欠金額", formatCurrency(getDisplayDuesBalance(record)))}
-      ${statementFieldHtml("繳費方式", record.paymentMethod || "-")}
-      ${statementFieldHtml("繳費日期", record.paymentDate || "-")}
-    </div>
-    <div style="margin-top:32px;">
-      <h3 style="font-size:16pt;font-weight:700;margin:0 0 12px;">本期社費明細</h3>
-      <table style="width:100%;border-collapse:collapse;font-size:12pt;">
-        <thead>
-          <tr>
-            <th style="border:1px solid #000;padding:8px;text-align:left;">項目</th>
-            <th style="border:1px solid #000;padding:8px;text-align:left;">說明</th>
-            <th style="border:1px solid #000;padding:8px;text-align:right;">金額</th>
-          </tr>
-        </thead>
-        <tbody>${rows}</tbody>
-      </table>
-    </div>
-    <div style="margin-top:32px;font-size:13pt;">
-      <p style="font-weight:700;margin:0;">備註</p>
-      <p style="min-height:64px;white-space:pre-wrap;border:1px solid #000;padding:12px;margin-top:8px;">${escapeHtml(record.note || "-")}</p>
-    </div>
-    <div style="margin-top:32px;text-align:right;font-size:11pt;">產出日期：${formatTaiwanDate(new Date())}</div>
-  `;
-}
-
-function statementFieldHtml(label: string, value: string) {
-  return `
-    <div>
-      <p style="font-size:10pt;color:rgba(0,0,0,.65);margin:0;">${escapeHtml(label)}</p>
-      <p style="border-bottom:1px solid #000;font-weight:700;margin:4px 0 0;padding-bottom:4px;">${escapeHtml(value)}</p>
+      </thead>
+      <tbody>${bodyRows}</tbody>
+    </table>
+    <div style="display:grid;grid-template-columns:repeat(3,1fr);gap:10px;margin-top:24px;font-size:17px;font-weight:700;">
+      <p style="margin:0;">前期未繳合計：${formatCurrency(totals.previousBalance)}</p>
+      <p style="margin:0;">餐費合計：${formatCurrency(totals.meal)}</p>
+      <p style="margin:0;">常年費合計：${formatCurrency(totals.annualFee)}</p>
+      <p style="margin:0;">特別捐合計：${formatCurrency(totals.specialDonation)}</p>
+      <p style="margin:0;">紅箱合計：${formatCurrency(totals.redBox)}</p>
+      <p style="margin:0;">扶輪基金合計：${formatCurrency(totals.rotaryFoundation)}</p>
+      <p style="margin:0;">代收付合計：${formatCurrency(totals.passThrough)}</p>
+      <p style="margin:0;">本期應繳合計：${formatCurrency(totals.currentDue)}</p>
+      <p style="margin:0;">已繳費用合計：${formatCurrency(totals.paidAmount)}</p>
+      <p style="margin:0;">尚未繳清合計：${formatCurrency(totals.balance)}</p>
     </div>
   `;
 }
 
-async function downloadStatementJpg(element: HTMLElement, record: DuesRecord, memberName: string) {
+async function downloadMemberRangeJpg(element: HTMLElement, filename: string) {
   const html2canvasModule = await import("html2canvas");
   const canvas = await html2canvasModule.default(element, {
     scale: 3,
@@ -1199,7 +1653,7 @@ async function downloadStatementJpg(element: HTMLElement, record: DuesRecord, me
   });
   const link = document.createElement("a");
   link.href = canvas.toDataURL("image/jpeg", 0.95);
-  link.download = `高雄晨光扶輪社_社費通知_${sanitizeFilename(memberName).replaceAll("_", "")}_${sanitizeFilename(record.periodMonth || "未填月份")}.jpg`;
+  link.download = filename;
   document.body.appendChild(link);
   link.click();
   link.remove();
@@ -1253,10 +1707,6 @@ function formatSummaryTitleMonth(periodMonth: string) {
   return `${year} 年 ${Number(month)} 月`;
 }
 
-function formatStatementMonth(periodMonth: string) {
-  return formatSummaryTitleMonth(periodMonth);
-}
-
 function formatTaiwanDate(date: Date) {
   return `${date.getFullYear()}/${String(date.getMonth() + 1).padStart(2, "0")}/${String(date.getDate()).padStart(2, "0")}`;
 }
@@ -1291,5 +1741,5 @@ function waitForBrowser() {
 }
 
 function getErrorMessage(error: unknown, fallback: string) {
-  return error instanceof Error ? `${fallback}：${error.message}` : fallback;
+  return error instanceof Error ? `${fallback}嚗?{error.message}` : fallback;
 }

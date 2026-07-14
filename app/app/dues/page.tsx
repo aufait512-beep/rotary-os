@@ -189,7 +189,7 @@ export default function DuesPage() {
       "前期未繳",
       "本期社費",
       "已繳費用",
-      "尚欠金額",
+      "本期應繳",
       "付款狀態",
       "繳費日期",
       "繳費方式",
@@ -501,7 +501,7 @@ export default function DuesPage() {
             </section>
 
             <div className="rounded-2xl bg-[#F8F3E8] p-4 font-bold">
-              尚欠金額：{formatCurrency(currentBalance)}
+              本期應繳：{formatCurrency(currentBalance)}
             </div>
 
             <label className="block">
@@ -772,7 +772,7 @@ export default function DuesPage() {
                           {memberName}
                         </h3>
                         <p className="mt-1 text-sm font-semibold">
-                          尚欠金額：{formatCurrency(getDisplayDuesBalance(record))}
+                          本期應繳：{formatCurrency(getDisplayDuesBalance(record))}
                         </p>
                       </div>
                       <span
@@ -791,7 +791,7 @@ export default function DuesPage() {
                         <p>前期未繳：{formatCurrency(record.previousBalance)}</p>
                         <p>本期社費：{formatCurrency(record.currentDue)}</p>
                         <p>已繳費用：{formatCurrency(record.paidAmount)}</p>
-                        <p>尚欠金額：{formatCurrency(getDisplayDuesBalance(record))}</p>
+                        <p>本期應繳：{formatCurrency(getDisplayDuesBalance(record))}</p>
                         <p>繳費方式：{record.paymentMethod}</p>
                         <p>繳費日期：{record.paymentDate || "-"}</p>
                         <details>
@@ -896,7 +896,7 @@ function DuesStatement({
         <StatementField label="前期未繳" value={formatCurrency(record.previousBalance)} />
         <StatementField label="本期社費總計" value={formatCurrency(record.currentDue)} />
         <StatementField label="已繳費用" value={formatCurrency(record.paidAmount)} />
-        <StatementField label="尚欠金額" value={formatCurrency(getDisplayDuesBalance(record))} />
+        <StatementField label="本期應繳" value={formatCurrency(getDisplayDuesBalance(record))} />
         <StatementField label="繳費方式" value={record.paymentMethod || "-"} />
         <StatementField label="繳費日期" value={record.paymentDate || "-"} />
       </div>
