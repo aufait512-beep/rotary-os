@@ -693,6 +693,7 @@ export default function AssistantPage() {
 
         <AssistantSection
           title="智慧建立活動"
+          description="貼上行程文字，由 Jade AI 協助整理並建立年度活動。"
           isOpen={openSection === "event"}
           onToggle={() => toggleSection("event")}
         >
@@ -786,6 +787,7 @@ export default function AssistantPage() {
 
         <AssistantSection
           title="未繳社費查詢"
+          description="選擇月份，快速查詢尚未繳清的社友名單。"
           isOpen={openSection === "unpaid"}
           onToggle={() => toggleSection("unpaid")}
         >
@@ -838,6 +840,7 @@ export default function AssistantPage() {
 
         <AssistantSection
           title="社友個人社費明細"
+          description="選擇社友與月份區間，查詢並匯出個人社費明細。"
           isOpen={openSection === "memberDues"}
           onToggle={() => toggleSection("memberDues")}
         >
@@ -980,6 +983,7 @@ export default function AssistantPage() {
         </AssistantSection>
         <AssistantSection
           title="每月社費批次作業"
+          description="批次建立每月社費、彙整應繳總表與個人通知。"
           isOpen={openSection === "batch"}
           onToggle={() => toggleSection("batch")}
         >
@@ -1197,11 +1201,13 @@ export default function AssistantPage() {
 
 function AssistantSection({
   title,
+  description,
   isOpen,
   onToggle,
   children,
 }: {
   title: string;
+  description: string;
   isOpen: boolean;
   onToggle: () => void;
   children: ReactNode;
@@ -1209,8 +1215,13 @@ function AssistantSection({
   return (
     <section className="rounded-3xl bg-white/85 p-5 shadow-[8px_8px_20px_rgba(0,0,0,0.12),-8px_-8px_20px_rgba(255,255,255,0.9)]">
       <button type="button" onClick={onToggle} className="flex w-full items-center justify-between gap-3 text-left">
-        <h2 className="text-xl font-bold">{title}</h2>
-        <span className="shrink-0 text-sm font-bold">{isOpen ? "???嗅?" : "??撅?"}</span>
+        <span className="min-w-0">
+          <span className="block text-xl font-bold">{title}</span>
+          <span className="mt-1 block break-words text-sm font-semibold text-[#173B73]/70">
+            {description}
+          </span>
+        </span>
+        <span className="shrink-0 text-sm font-bold">{isOpen ? "收合" : "展開"}</span>
       </button>
       {isOpen ? <div className="mt-5">{children}</div> : null}
     </section>
