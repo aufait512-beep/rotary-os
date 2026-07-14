@@ -462,6 +462,8 @@ export default function CalendarPage() {
                   annualEvents.map((eventItem) => {
                     const isExpanded = expandedEventId === eventItem.id;
                     const year = years.find((item) => item.id === eventItem.rotaryYearId);
+                    const eventType = eventItem.eventType.trim();
+                    const topic = eventItem.topic.trim();
 
                     return (
                       <article
@@ -490,6 +492,18 @@ export default function CalendarPage() {
                           <h3 className="mt-1 break-words text-lg font-bold">
                             {eventItem.title || "未命名活動"}
                           </h3>
+                          {eventType ? (
+                            <div className="mt-2">
+                              <span className="inline-flex max-w-full rounded-full bg-[#F7C948] px-3 py-1 text-xs font-bold text-[#173B73]">
+                                活動類型：{eventType}
+                              </span>
+                            </div>
+                          ) : null}
+                          {topic ? (
+                            <p className="mt-2 line-clamp-2 break-words text-sm font-semibold text-[#173B73]/85">
+                              主題：{topic}
+                            </p>
+                          ) : null}
                           <p className="mt-2 break-words text-sm font-semibold text-[#173B73]/80">
                             {formatDate(eventItem.date)}｜{formatEventTime(eventItem)}｜{eventItem.location || "-"}
                           </p>
