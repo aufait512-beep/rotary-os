@@ -1,4 +1,4 @@
-@import "tailwindcss";
+﻿@import "tailwindcss";
 
 :root {
   --background: #ffffff;
@@ -28,7 +28,7 @@ body {
 @media print {
   @page {
     size: A4 portrait;
-    margin: 8mm;
+    margin: 20mm;
   }
 
   html,
@@ -51,10 +51,11 @@ body {
   #program-sheet {
     position: absolute !important;
     inset: 0 auto auto 0 !important;
-    width: 194mm !important;
+    width: 170mm !important;
+    max-width: 170mm !important;
     min-height: auto !important;
     padding: 0 !important;
-    margin: 0 !important;
+    margin: 0 auto !important;
     background: #ffffff !important;
     box-sizing: border-box !important;
     color: #000000 !important;
@@ -78,21 +79,30 @@ body {
   }
 
   #program-sheet .program-row {
-    padding-block: 1px !important;
+    padding-block: 2px !important;
   }
 
   #program-sheet .program-upcoming-table {
+    table-layout: fixed !important;
     font-size: 10px !important;
     line-height: 1.15 !important;
   }
 
   #program-sheet .program-upcoming-table th,
   #program-sheet .program-upcoming-table td {
-    padding: 1px 3px !important;
+    padding: 2px 3px !important;
+    word-break: break-word !important;
   }
 
   #program-sheet .speaker-session {
-    font-size: 10px !important;
+    font-size: 11px !important;
+  }
+
+  #program-sheet .program-nowrap {
+    white-space: normal !important;
+    overflow: visible !important;
+    text-overflow: clip !important;
+    word-break: break-word !important;
   }
 
   header,
@@ -109,9 +119,11 @@ body {
 .program-sheet {
   width: 210mm;
   min-height: 297mm;
-  padding: 10mm 12mm 9mm 12mm;
-  background: white;
-  color: black;
+  max-width: 210mm;
+  padding: 20mm;
+  margin: 0 auto;
+  background: #ffffff;
+  color: #000000;
   box-sizing: border-box;
   font-family: "DFKai-SB", "標楷體", "KaiTi", serif;
   font-size: 12px;
@@ -132,7 +144,7 @@ body {
 }
 
 .program-body {
-  margin-top: 10px;
+  margin-top: 8px;
 }
 
 .program-row {
@@ -150,12 +162,13 @@ body {
 }
 
 .upcoming-events-block {
-  margin-block: 8px;
+  margin-block: 6px;
   break-inside: avoid;
   page-break-inside: avoid;
 }
 
 .program-upcoming-table {
+  table-layout: fixed;
   font-size: 10px;
   line-height: 1.15;
 }
@@ -163,6 +176,7 @@ body {
 .program-upcoming-table th,
 .program-upcoming-table td {
   padding: 2px 4px;
+  word-break: break-word;
 }
 
 .program-upcoming-table tr {
@@ -171,6 +185,7 @@ body {
 }
 
 .speaker-session {
+  margin-block: 2px;
   break-inside: avoid;
   page-break-inside: avoid;
   font-size: 11px;

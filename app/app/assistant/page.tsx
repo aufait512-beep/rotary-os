@@ -257,7 +257,7 @@ export default function AssistantPage() {
         ...emptyEventItem,
         ...defaultEventTimes,
         rotaryYearId: activeYear?.id || "",
-        eventType: parsed.event_type || "靘?",
+        eventType: parsed.event_type || "例會",
         title: parsed.event_name,
         meetingNo: parsed.meeting_no,
         date: parsed.date,
@@ -1086,13 +1086,13 @@ export default function AssistantPage() {
               </label>
               <div className="grid grid-cols-2 gap-3">
                 <button type="button" onClick={loadMonthlySummary} className={`rounded-2xl bg-[#F7C948] py-3 font-bold ${buttonShadow}`}>
-                  ?汗
+                  查詢
                 </button>
                 <button type="button" onClick={() => exportSummaryCsv(summaryMonth, summaryRows)} className={`rounded-2xl bg-white py-3 font-bold ${buttonShadow}`}>
-                  ?臬 CSV
+                  匯出 CSV
                 </button>
                 <button type="button" onClick={() => window.print()} className={`rounded-2xl bg-white py-3 font-bold ${buttonShadow}`}>
-                  ?
+                  列印
                 </button>
               </div>
               <div className="space-y-3 rounded-2xl bg-white p-4">
@@ -1756,3 +1756,4 @@ function waitForBrowser() {
 function getErrorMessage(error: unknown, fallback: string) {
   return error instanceof Error ? `${fallback}：${error.message}` : fallback;
 }
+

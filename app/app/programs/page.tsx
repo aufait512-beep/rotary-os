@@ -1,13 +1,9 @@
-"use client";
+﻿"use client";
 
 import Link from "next/link";
 import { FormEvent, useEffect, useMemo, useState } from "react";
 import { EventItem, sortEventsByDate } from "@/lib/events";
-import {
-  emptyProgramItem,
-  ProgramItem,
-  sortProgramsByDate,
-} from "@/lib/programs";
+import { emptyProgramItem, ProgramItem, sortProgramsByDate } from "@/lib/programs";
 import {
   deleteProgram,
   fetchEvents,
@@ -41,19 +37,13 @@ export default function ProgramsPage() {
   const [showAllEvents, setShowAllEvents] = useState(false);
 
   const sortedEvents = useMemo(() => sortEventsByDate(events), [events]);
-  const sortedPrograms = useMemo(
-    () => sortProgramsByDate(programs),
-    [programs]
-  );
+  const sortedPrograms = useMemo(() => sortProgramsByDate(programs), [programs]);
   const selectedEvent = useMemo(
     () => sortedEvents.find((eventItem) => eventItem.id === form.eventId),
     [form.eventId, sortedEvents]
   );
   const selectableEvents = useMemo(
-    () =>
-      showAllEvents
-        ? sortedEvents
-        : sortedEvents.filter((eventItem) => isMeetingEvent(eventItem)),
+    () => showAllEvents ? sortedEvents : sortedEvents.filter((eventItem) => isMeetingEvent(eventItem)),
     [showAllEvents, sortedEvents]
   );
   const activeEvent = selectedEvent ?? programToEventFallback(form);
@@ -98,14 +88,12 @@ export default function ProgramsPage() {
     } else {
       setPrograms(programsResult.value);
     }
-
   }
 
   useEffect(() => {
     const timerId = window.setTimeout(() => {
       void loadData();
     }, 0);
-
     return () => window.clearTimeout(timerId);
   }, []);
 
@@ -120,21 +108,17 @@ export default function ProgramsPage() {
 
   async function handleExportPdf() {
     const programSheet = document.getElementById("program-sheet");
-    if (!programSheet) {
-      return;
-    }
+    if (!programSheet) return;
 
     setIsExportingPdf(true);
-
     try {
       const html2pdfModule = await import("html2pdf.js");
-      const html2pdf = (html2pdfModule.default ??
-        html2pdfModule) as Html2PdfFactory;
+      const html2pdf = (html2pdfModule.default ?? html2pdfModule) as Html2PdfFactory;
 
       await html2pdf()
         .set({
           filename: buildPdfFilename(activeEvent),
-          margin: 8,
+          margin: 20,
           image: { type: "jpeg", quality: 0.98 },
           html2canvas: {
             scale: 3,
@@ -156,9 +140,7 @@ export default function ProgramsPage() {
   }
 
   function handleEventSelect(eventId: string) {
-    const eventForProgram = sortedEvents.find(
-      (eventItem) => eventItem.id === eventId
-    );
+    const eventForProgram = sortedEvents.find((eventItem) => eventItem.id === eventId);
     if (!eventForProgram) {
       setForm((currentForm) => ({ ...currentForm, eventId: "" }));
       return;
@@ -167,9 +149,7 @@ export default function ProgramsPage() {
   }
 
   function applyEventToForm(eventForProgram: EventItem, loadedPrograms: ProgramItem[]) {
-    const existingProgram = loadedPrograms.find(
-      (program) => program.eventId === eventForProgram.id
-    );
+    const existingProgram = loadedPrograms.find((program) => program.eventId === eventForProgram.id);
 
     if (existingProgram) {
       handleEdit(mergeProgramWithEvent(existingProgram, eventForProgram), false);
@@ -178,7 +158,7 @@ export default function ProgramsPage() {
     }
 
     setEditingId(null);
-    setProgramNotice("尚未建立程序表");
+    setProgramNotice("此活動尚未建立程序表，請確認後儲存。");
     setForm((currentForm) => ({
       ...currentForm,
       eventId: eventForProgram.id,
@@ -194,14 +174,9 @@ export default function ProgramsPage() {
   }
 
   useEffect(() => {
-    if (form.eventId || sortedEvents.length === 0) {
-      return;
-    }
-
+    if (form.eventId || sortedEvents.length === 0) return;
     const defaultEvent = findDefaultWeeklyMeeting(sortedEvents);
-    if (defaultEvent) {
-      applyEventToForm(defaultEvent, programs);
-    }
+    if (defaultEvent) applyEventToForm(defaultEvent, programs);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [form.eventId, programs, sortedEvents]);
 
@@ -211,13 +186,13 @@ export default function ProgramsPage() {
     setProgramNotice("");
 
     if (!form.eventId || !isUuid(form.eventId)) {
-      setErrorMessage("請先選擇例會活動");
+      setErrorMessage("請先選擇例會活動。");
       return;
     }
 
     const linkedEvent = sortedEvents.find((eventItem) => eventItem.id === form.eventId);
     if (!linkedEvent) {
-      setErrorMessage("請先選擇例會活動");
+      setErrorMessage("請先選擇例會活動。");
       return;
     }
 
@@ -234,20 +209,12 @@ export default function ProgramsPage() {
     const payload = buildProgramForSave(form, linkedEvent, editingId ?? crypto.randomUUID());
 
     try {
-      if (editingId) {
-        const savedProgram = await updateProgram(payload);
-        const reloadedPrograms = await fetchPrograms();
-        setPrograms(reloadedPrograms);
-        setEditingId(savedProgram.id);
-        setForm(programToForm(mergeProgramWithEvent(savedProgram, linkedEvent)));
-      } else {
-        const savedProgram = await insertProgram(payload);
-        const reloadedPrograms = await fetchPrograms();
-        setPrograms(reloadedPrograms);
-        setEditingId(savedProgram.id);
-        setForm(programToForm(mergeProgramWithEvent(savedProgram, linkedEvent)));
-      }
-      setProgramNotice("程序表已儲存");
+      const savedProgram = editingId ? await updateProgram(payload) : await insertProgram(payload);
+      const reloadedPrograms = await fetchPrograms();
+      setPrograms(reloadedPrograms);
+      setEditingId(savedProgram.id);
+      setForm(programToForm(mergeProgramWithEvent(savedProgram, linkedEvent)));
+      setProgramNotice("程序表已儲存。");
     } catch (error) {
       console.error({
         module: "programs",
@@ -257,7 +224,6 @@ export default function ProgramsPage() {
         error,
       });
       setErrorMessage(getErrorMessage(error, "程序表儲存失敗"));
-      return;
     }
   }
 
@@ -265,23 +231,16 @@ export default function ProgramsPage() {
     setForm(programToForm(program));
     setEditingId(program.id);
     setProgramNotice("");
-    if (scrollToTop) {
-      window.scrollTo({ top: 0, behavior: "smooth" });
-    }
+    if (scrollToTop) window.scrollTo({ top: 0, behavior: "smooth" });
   }
 
   async function handleDelete(programId: string) {
-    const confirmed = window.confirm("確定要刪除這份程序表嗎？");
-    if (!confirmed) {
-      return;
-    }
+    if (!window.confirm("確定要刪除此程序表嗎？")) return;
 
     try {
       setErrorMessage("");
       await deleteProgram(programId);
-      setPrograms((currentPrograms) =>
-        currentPrograms.filter((program) => program.id !== programId)
-      );
+      setPrograms((currentPrograms) => currentPrograms.filter((program) => program.id !== programId));
     } catch (error) {
       console.error({
         module: "programs",
@@ -292,9 +251,7 @@ export default function ProgramsPage() {
       setErrorMessage(getErrorMessage(error, "程序表刪除失敗"));
       return;
     }
-    if (editingId === programId) {
-      resetForm();
-    }
+    if (editingId === programId) resetForm();
   }
 
   return (
@@ -302,46 +259,27 @@ export default function ProgramsPage() {
       <section className="mx-auto max-w-5xl space-y-6">
         <header className="mx-auto max-w-md space-y-3 print:hidden">
           <Link href="/" className="text-sm font-bold text-[#173B73]/75">
-            回首頁
+            返回首頁
           </Link>
           <div>
-            <p className="text-sm font-bold tracking-[0.18em] text-[#C99700]">
-              程序表模組
-            </p>
+            <p className="text-sm font-bold tracking-[0.18em] text-[#C99700]">Rotary OS</p>
             <h1 className="mt-2 text-3xl font-bold">程序表管理</h1>
           </div>
         </header>
-        {errorMessage ? (
-          <p className="mx-auto max-w-md rounded-2xl border border-red-200 bg-red-50 p-4 text-sm font-bold text-red-700 print:hidden">
-            {errorMessage}
-          </p>
-        ) : null}
-        {programNotice ? (
-          <p className="mx-auto max-w-md rounded-2xl bg-white/80 p-4 text-sm font-bold text-[#173B73]/75 print:hidden">
-            {programNotice}
-          </p>
-        ) : null}
-        {programErrorMessage ? (
-          <p className="mx-auto max-w-md rounded-2xl border border-red-200 bg-red-50 p-4 text-sm font-bold text-red-700 print:hidden">
-            {programErrorMessage}
-          </p>
-        ) : null}
+
+        {errorMessage ? <Notice tone="error">{errorMessage}</Notice> : null}
+        {programNotice ? <Notice tone="info">{programNotice}</Notice> : null}
+        {programErrorMessage ? <Notice tone="error">{programErrorMessage}</Notice> : null}
 
         <form
           onSubmit={handleSubmit}
           className="mx-auto max-w-md space-y-4 rounded-3xl bg-white/85 p-5 shadow-[8px_8px_20px_rgba(0,0,0,0.12),-8px_-8px_20px_rgba(255,255,255,0.9)] print:hidden"
         >
           <div className="flex items-center justify-between gap-3">
-            <h2 className="text-xl font-bold">
-              {editingId ? "編輯程序表" : "建立程序表"}
-            </h2>
+            <h2 className="text-xl font-bold">{editingId ? "編輯程序表" : "新增程序表"}</h2>
             {editingId ? (
-              <button
-                type="button"
-                onClick={resetForm}
-                className={`rounded-2xl bg-white px-4 py-2 text-sm font-bold text-[#173B73] ${buttonShadow}`}
-              >
-                取消
+              <button type="button" onClick={resetForm} className={"rounded-2xl bg-white px-4 py-2 text-sm font-bold text-[#173B73] " + buttonShadow}>
+                清空
               </button>
             ) : null}
           </div>
@@ -353,56 +291,22 @@ export default function ProgramsPage() {
               onChange={(event) => handleEventSelect(event.target.value)}
               className="mt-2 w-full rounded-2xl border border-[#E5D9BD] bg-white px-4 py-3 text-base font-semibold text-[#173B73] outline-none transition focus:border-[#173B73] focus:ring-2 focus:ring-[#F7C948]"
             >
-              <option value="">請選擇一場活動</option>
+              <option value="">請選擇例會活動</option>
               {selectableEvents.map((eventItem) => (
-                <option key={eventItem.id} value={eventItem.id}>
-                  {formatEventOption(eventItem)}
-                </option>
+                <option key={eventItem.id} value={eventItem.id}>{formatEventOption(eventItem)}</option>
               ))}
             </select>
           </label>
 
           <label className="flex items-center gap-2 text-sm font-bold">
-            <input
-              type="checkbox"
-              checked={showAllEvents}
-              onChange={(event) => setShowAllEvents(event.target.checked)}
-            />
-            查看其他活動
+            <input type="checkbox" checked={showAllEvents} onChange={(event) => setShowAllEvents(event.target.checked)} />
+            顯示所有活動
           </label>
 
-          <label className="block">
-            <span className="text-sm font-bold">聯誼長</span>
-            <input
-              value={form.fellowshipChair}
-              onChange={(event) =>
-                setForm((currentForm) => ({
-                  ...currentForm,
-                  fellowshipChair: event.target.value,
-                }))
-              }
-              className="mt-2 w-full rounded-2xl border border-[#E5D9BD] bg-white px-4 py-3 text-base text-[#173B73] outline-none transition focus:border-[#173B73] focus:ring-2 focus:ring-[#F7C948]"
-            />
-          </label>
+          <TextField label="聯誼長" value={form.fellowshipChair} onChange={(value) => setForm((currentForm) => ({ ...currentForm, fellowshipChair: value }))} />
+          <TextField label="糾察長" value={form.sergeantAtArms} onChange={(value) => setForm((currentForm) => ({ ...currentForm, sergeantAtArms: value }))} />
 
-          <label className="block">
-            <span className="text-sm font-bold">糾察長</span>
-            <input
-              value={form.sergeantAtArms}
-              onChange={(event) =>
-                setForm((currentForm) => ({
-                  ...currentForm,
-                  sergeantAtArms: event.target.value,
-                }))
-              }
-              className="mt-2 w-full rounded-2xl border border-[#E5D9BD] bg-white px-4 py-3 text-base text-[#173B73] outline-none transition focus:border-[#173B73] focus:ring-2 focus:ring-[#F7C948]"
-            />
-          </label>
-
-          <button
-            type="submit"
-            className={`w-full rounded-2xl bg-[#F7C948] py-4 font-bold text-[#173B73] ${buttonShadow}`}
-          >
+          <button type="submit" className={"w-full rounded-2xl bg-[#F7C948] py-4 font-bold text-[#173B73] " + buttonShadow}>
             {editingId ? "儲存修改" : "儲存程序表"}
           </button>
         </form>
@@ -411,36 +315,20 @@ export default function ProgramsPage() {
           <div className="mx-auto flex max-w-[210mm] items-center justify-between gap-3 print:hidden">
             <h2 className="text-2xl font-bold">A4 程序表預覽</h2>
             <div className="flex shrink-0 gap-2">
-              <button
-                type="button"
-                onClick={handlePrint}
-                className={`rounded-2xl bg-[#F7C948] px-3 py-2 text-sm font-bold text-[#173B73] ${buttonShadow}`}
-              >
-                🖨️ 列印
+              <button type="button" onClick={handlePrint} className={"rounded-2xl bg-[#F7C948] px-3 py-2 text-sm font-bold text-[#173B73] " + buttonShadow}>
+                列印
               </button>
-              <button
-                type="button"
-                onClick={handleExportPdf}
-                disabled={isExportingPdf}
-                className={`rounded-2xl bg-white px-3 py-2 text-sm font-bold text-[#173B73] disabled:opacity-60 ${buttonShadow}`}
-              >
-                {isExportingPdf ? "產生中" : "📄 匯出PDF"}
+              <button type="button" onClick={handleExportPdf} disabled={isExportingPdf} className={"rounded-2xl bg-white px-3 py-2 text-sm font-bold text-[#173B73] disabled:opacity-60 " + buttonShadow}>
+                {isExportingPdf ? "匯出中" : "匯出 PDF"}
               </button>
             </div>
           </div>
 
           <div className="overflow-x-auto rounded-3xl bg-white/70 p-4 shadow-[8px_8px_20px_rgba(0,0,0,0.12),-8px_-8px_20px_rgba(255,255,255,0.9)] print:overflow-visible print:rounded-none print:bg-white print:p-0 print:shadow-none">
-            <div
-              id="program-sheet"
-              className="program-sheet mx-auto"
-            >
+            <div id="program-sheet" className="program-sheet mx-auto">
               <header className="program-header relative border-b border-black text-center">
-                <p className="program-date absolute right-0 top-0">
-                  {formatProgramDate(activeEvent.date)}
-                </p>
-                <h2 className="program-title font-bold leading-snug">
-                  {buildProgramTitle(activeEvent)}
-                </h2>
+                <p className="program-date absolute right-0 top-0">{formatProgramDate(activeEvent.date)}</p>
+                <h2 className="program-title font-bold leading-snug">{buildProgramTitle(activeEvent)}</h2>
               </header>
 
               <section className="program-body">
@@ -454,9 +342,7 @@ export default function ProgramsPage() {
 
                   <div className="four-way-test">
                     <p>請社長帶領社友朗讀 四大考驗</p>
-                    <p>
-                      四大考驗～我們所想、所說、所做的事應事先捫心自問：
-                    </p>
+                    <p>四大考驗－我們所想、所說、所做的事應事先捫心自問：</p>
                     <p>1. 是否一切屬於真實？</p>
                     <p>2. 是否各方得到公平？</p>
                     <p>3. 能否促進親善友誼？</p>
@@ -472,12 +358,8 @@ export default function ProgramsPage() {
                 <UpcomingEventsTable events={upcomingEvents} />
 
                 <ProgramRow time="19:35" className="speaker-session">
-                  <p className="program-nowrap" title={`講師介紹：${activeEvent.speaker || "-"}`}>
-                    講師介紹：{activeEvent.speaker || "-"}
-                  </p>
-                  <p className="program-nowrap" title={`專題演講：${activeEvent.topic || "-"}`}>
-                    專題演講：{activeEvent.topic || "-"}
-                  </p>
+                  <p className="program-nowrap" title={"講師介紹：" + (activeEvent.speaker || "-")}>講師介紹：{activeEvent.speaker || "-"}</p>
+                  <p className="program-nowrap" title={"專題演講：" + (activeEvent.topic || "-")}>專題演講：{activeEvent.topic || "-"}</p>
                 </ProgramRow>
 
                 <ProgramRow time="20:05">
@@ -500,55 +382,27 @@ export default function ProgramsPage() {
             </div>
           ) : sortedPrograms.length === 0 ? (
             <div className="rounded-3xl bg-white/75 p-5 text-center font-semibold text-[#173B73]/70 shadow-[6px_6px_16px_rgba(0,0,0,0.1),-6px_-6px_16px_rgba(255,255,255,0.8)]">
-              目前尚未建立程序表
+              尚未建立程序表
             </div>
           ) : (
             sortedPrograms.map((program) => {
-              const linkedEvent = sortedEvents.find(
-                (eventItem) => eventItem.id === program.eventId
-              );
-              const displayProgram = linkedEvent
-                ? mergeProgramWithEvent(program, linkedEvent)
-                : program;
-
+              const linkedEvent = sortedEvents.find((eventItem) => eventItem.id === program.eventId);
+              const displayProgram = linkedEvent ? mergeProgramWithEvent(program, linkedEvent) : program;
               return (
-              <article
-                key={program.id}
-                className="rounded-3xl bg-white/85 p-5 shadow-[8px_8px_20px_rgba(0,0,0,0.12),-8px_-8px_20px_rgba(255,255,255,0.9)]"
-              >
-                <p className="text-sm font-bold text-[#C99700]">
-                  {displayProgram.eventId
-                    ? formatDateSlash(displayProgram.date)
-                    : "此程序表尚未連結活動"}
-                </p>
-                <h3 className="mt-1 break-words text-xl font-bold">
-                  {displayProgram.meetingName || "未命名程序表"}
-                </h3>
-                <div className="mt-3 space-y-1 text-sm font-semibold text-[#173B73]/80">
-                  <p>
-                    地點：{displayProgram.location || "-"} {displayProgram.room}
-                  </p>
-                  <p>主題：{displayProgram.topic || "-"}</p>
-                  <p>主講人：{displayProgram.speaker || "-"}</p>
-                </div>
+                <article key={program.id} className="rounded-3xl bg-white/85 p-5 shadow-[8px_8px_20px_rgba(0,0,0,0.12),-8px_-8px_20px_rgba(255,255,255,0.9)]">
+                  <p className="text-sm font-bold text-[#C99700]">{displayProgram.eventId ? formatDateSlash(displayProgram.date) : "此程序表尚未連結活動"}</p>
+                  <h3 className="mt-1 break-words text-xl font-bold">{displayProgram.meetingName || "未命名程序表"}</h3>
+                  <div className="mt-3 space-y-1 text-sm font-semibold text-[#173B73]/80">
+                    <p>地點：{displayProgram.location || "-"} {displayProgram.room}</p>
+                    <p>主題：{displayProgram.topic || "-"}</p>
+                    <p>主講人：{displayProgram.speaker || "-"}</p>
+                  </div>
 
-                <div className="mt-5 grid grid-cols-2 gap-3">
-                  <button
-                    type="button"
-                    onClick={() => handleEdit(displayProgram)}
-                    className={`rounded-2xl bg-[#F7C948] py-3 font-bold text-[#173B73] ${buttonShadow}`}
-                  >
-                    編輯
-                  </button>
-                  <button
-                    type="button"
-                    onClick={() => handleDelete(program.id)}
-                    className={`rounded-2xl bg-white py-3 font-bold text-[#173B73] ${buttonShadow}`}
-                  >
-                    刪除
-                  </button>
-                </div>
-              </article>
+                  <div className="mt-5 grid grid-cols-2 gap-3">
+                    <button type="button" onClick={() => handleEdit(displayProgram)} className={"rounded-2xl bg-[#F7C948] py-3 font-bold text-[#173B73] " + buttonShadow}>編輯</button>
+                    <button type="button" onClick={() => handleDelete(program.id)} className={"rounded-2xl bg-white py-3 font-bold text-[#173B73] " + buttonShadow}>刪除</button>
+                  </div>
+                </article>
               );
             })
           )}
@@ -558,17 +412,23 @@ export default function ProgramsPage() {
   );
 }
 
-function ProgramRow({
-  time,
-  children,
-  className = "",
-}: {
-  time: string;
-  children: React.ReactNode;
-  className?: string;
-}) {
+function Notice({ tone, children }: { tone: "error" | "info"; children: React.ReactNode }) {
+  const className = tone === "error" ? "border-red-200 bg-red-50 text-red-700" : "bg-white/80 text-[#173B73]/75";
+  return <p className={"mx-auto max-w-md rounded-2xl p-4 text-sm font-bold print:hidden " + className}>{children}</p>;
+}
+
+function TextField({ label, value, onChange }: { label: string; value: string; onChange: (value: string) => void }) {
   return (
-    <div className={`program-row grid grid-cols-[22mm_1fr] gap-2 ${className}`}>
+    <label className="block">
+      <span className="text-sm font-bold">{label}</span>
+      <input value={value} onChange={(event) => onChange(event.target.value)} className="mt-2 w-full rounded-2xl border border-[#E5D9BD] bg-white px-4 py-3 text-base text-[#173B73] outline-none transition focus:border-[#173B73] focus:ring-2 focus:ring-[#F7C948]" />
+    </label>
+  );
+}
+
+function ProgramRow({ time, children, className = "" }: { time: string; children: React.ReactNode; className?: string }) {
+  return (
+    <div className={"program-row grid grid-cols-[22mm_1fr] gap-2 " + className}>
       <div className="program-time font-bold">{time}</div>
       <div>{children}</div>
     </div>
@@ -582,41 +442,21 @@ function UpcomingEventsTable({ events }: { events: EventItem[] }) {
         <thead>
           <tr>
             <th className="w-[18%] border border-black">日期</th>
-            <th className="w-[42%] border border-black">
-              2026年 活動
-            </th>
+            <th className="w-[42%] border border-black">2026年 活動</th>
             <th className="w-[18%] border border-black">時間</th>
             <th className="w-[22%] border border-black">地點</th>
           </tr>
         </thead>
         <tbody>
           {events.length === 0 ? (
-            <tr>
-              <td className="border border-black text-center" colSpan={4}>
-                -
-              </td>
-            </tr>
+            <tr><td className="border border-black text-center" colSpan={4}>-</td></tr>
           ) : (
             events.map((eventItem) => (
               <tr key={eventItem.id}>
-                <td className="border border-black text-center align-top">
-                  <p>{formatAnnouncementDate(eventItem.date)}</p>
-                  <p>({formatWeekday(eventItem)})</p>
-                </td>
-                <td className="border border-black align-top">
-                  <p>{eventItem.title || "-"}</p>
-                  <p>{eventItem.topic || "-"}</p>
-                  <p>{eventItem.speaker || "-"}</p>
-                  <p>{eventItem.note || "-"}</p>
-                </td>
-                <td className="border border-black align-top">
-                  <p>{eventItem.dinnerTime || "-"}</p>
-                  <p>{eventItem.meetingTime || "-"}</p>
-                </td>
-                <td className="border border-black align-top">
-                  <p>{eventItem.location || "-"}</p>
-                  <p>{eventItem.room || "-"}</p>
-                </td>
+                <td className="border border-black text-center align-top"><p>{formatAnnouncementDate(eventItem.date)}</p><p>({formatWeekday(eventItem)})</p></td>
+                <td className="border border-black align-top"><p>{eventItem.title || "-"}</p><p>{eventItem.topic || "-"}</p><p>{eventItem.speaker || "-"}</p><p>{eventItem.note || "-"}</p></td>
+                <td className="border border-black align-top"><p>{eventItem.dinnerTime || "-"}</p><p>{eventItem.meetingTime || "-"}</p></td>
+                <td className="border border-black align-top"><p>{eventItem.location || "-"}</p><p>{eventItem.room || "-"}</p></td>
               </tr>
             ))
           )}
@@ -628,28 +468,17 @@ function UpcomingEventsTable({ events }: { events: EventItem[] }) {
 
 function getUpcomingEvents(activeEvent: EventItem, events: EventItem[]) {
   const activeDate = parseDate(activeEvent.date);
-  if (!activeDate) {
-    return [];
-  }
-
+  if (!activeDate) return [];
   const nextMonth = new Date(activeDate.getFullYear(), activeDate.getMonth() + 1, 1);
   const nextMonthEnd = new Date(activeDate.getFullYear(), activeDate.getMonth() + 2, 0);
 
-  return sortEventsByDate(
-    events.filter((eventItem) => {
-      const eventDate = parseDate(eventItem.date);
-      if (!eventDate || eventItem.id === activeEvent.id || eventDate <= activeDate) {
-        return false;
-      }
-
-      const sameMonthAfter =
-        eventDate.getFullYear() === activeDate.getFullYear() &&
-        eventDate.getMonth() === activeDate.getMonth();
-      const inNextMonth = eventDate >= nextMonth && eventDate <= nextMonthEnd;
-
-      return sameMonthAfter || inNextMonth;
-    })
-  );
+  return sortEventsByDate(events.filter((eventItem) => {
+    const eventDate = parseDate(eventItem.date);
+    if (!eventDate || eventItem.id === activeEvent.id || eventDate <= activeDate) return false;
+    const sameMonthAfter = eventDate.getFullYear() === activeDate.getFullYear() && eventDate.getMonth() === activeDate.getMonth();
+    const inNextMonth = eventDate >= nextMonth && eventDate <= nextMonthEnd;
+    return sameMonthAfter || inNextMonth;
+  }));
 }
 
 function mergeProgramWithEvent(program: ProgramItem, eventItem: EventItem): ProgramItem {
@@ -685,11 +514,7 @@ function programToForm(program: ProgramItem): ProgramFormState {
   };
 }
 
-function buildProgramForSave(
-  form: ProgramFormState,
-  eventItem: EventItem,
-  programId: string
-): ProgramItem {
+function buildProgramForSave(form: ProgramFormState, eventItem: EventItem, programId: string): ProgramItem {
   return {
     id: programId,
     eventId: eventItem.id,
@@ -707,7 +532,7 @@ function buildProgramForSave(
 }
 
 function isUuid(value: string) {
-  return /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(value);
+  return /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{12}$/i.test(value);
 }
 
 function programToEventFallback(program: ProgramFormState): EventItem {
@@ -735,16 +560,13 @@ function programToEventFallback(program: ProgramFormState): EventItem {
 }
 
 function buildProgramTitle(eventItem: EventItem) {
-  if (!eventItem.meetingNo) {
-    return "高雄晨光扶輪社 2026-2027 年度 程序表";
-  }
-
-  return `高雄晨光扶輪社 第${eventItem.meetingNo}次例會 程序表`;
+  if (!eventItem.meetingNo) return "高雄晨光扶輪社 2026-2027 年度 程序表";
+  return "高雄晨光扶輪社 第" + eventItem.meetingNo + "次例會 程序表";
 }
 
 function buildPdfFilename(eventItem: EventItem) {
   const meetingNo = sanitizeFilenamePart(eventItem.meetingNo || "XXX");
-  return `高雄晨光扶輪社_第${meetingNo}次例會_程序表.pdf`;
+  return "高雄晨光扶輪社_第" + meetingNo + "次例會_程序表.pdf";
 }
 
 function sanitizeFilenamePart(value: string) {
@@ -753,54 +575,32 @@ function sanitizeFilenamePart(value: string) {
 
 function formatProgramDate(dateValue: string) {
   const date = parseDate(dateValue);
-  if (!date) {
-    return "";
-  }
-
-  return `${date.getFullYear()}. ${date.getMonth() + 1}. ${date.getDate()}.`;
+  if (!date) return "";
+  return date.getFullYear() + ". " + (date.getMonth() + 1) + ". " + date.getDate() + ".";
 }
 
 function formatAnnouncementDate(dateValue: string) {
   const date = parseDate(dateValue);
-  if (!date) {
-    return "-";
-  }
-
-  return `${date.getMonth() + 1}/${date.getDate()}`;
+  if (!date) return "-";
+  return (date.getMonth() + 1) + "/" + date.getDate();
 }
 
 function formatWeekday(eventItem: EventItem) {
-  if (eventItem.weekday) {
-    return eventItem.weekday.replace(/^星期/, "");
-  }
-
+  if (eventItem.weekday) return eventItem.weekday.replace(/^星期/, "");
   const date = parseDate(eventItem.date);
-  if (!date) {
-    return "-";
-  }
-
+  if (!date) return "-";
   return ["日", "一", "二", "三", "四", "五", "六"][date.getDay()];
 }
 
 function formatDateSlash(dateValue: string) {
-  if (!dateValue) {
-    return "未填日期";
-  }
-
+  if (!dateValue) return "未設定日期";
   return dateValue.replaceAll("-", "/");
 }
 
 function parseDate(dateValue: string) {
-  if (!dateValue) {
-    return null;
-  }
-
-  const date = new Date(`${dateValue}T00:00:00`);
-  if (Number.isNaN(date.getTime())) {
-    return null;
-  }
-
-  return date;
+  if (!dateValue) return null;
+  const date = new Date(dateValue + "T00:00:00");
+  return Number.isNaN(date.getTime()) ? null : date;
 }
 
 function isMeetingEvent(eventItem: EventItem) {
@@ -822,15 +622,14 @@ function findDefaultWeeklyMeeting(events: EventItem[]) {
     const eventDate = parseDate(eventItem.date);
     return eventDate ? eventDate >= monday && eventDate <= sunday : false;
   });
-
   return weeklyMeetings[0] ?? sortEventsByDate(events).find(isMeetingEvent) ?? null;
 }
 
 function formatEventOption(eventItem: EventItem) {
-  const meetingNo = eventItem.meetingNo ? `第${eventItem.meetingNo}次例會` : "一般活動";
-  return `${meetingNo}｜${formatDateSlash(eventItem.date)}｜${eventItem.title || "未命名活動"}`;
+  const meetingNo = eventItem.meetingNo ? "第" + eventItem.meetingNo + "次" : "一般活動";
+  return meetingNo + "｜" + formatDateSlash(eventItem.date) + "｜" + (eventItem.title || "未命名活動");
 }
 
 function getErrorMessage(error: unknown, fallback: string) {
-  return error instanceof Error ? `${fallback}：${error.message}` : fallback;
+  return error instanceof Error ? fallback + "：" + error.message : fallback;
 }
