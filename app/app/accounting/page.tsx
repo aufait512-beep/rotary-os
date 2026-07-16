@@ -3,6 +3,7 @@
 import Link from "next/link";
 import { Fragment, FormEvent, useCallback, useEffect, useMemo, useState } from "react";
 import BalanceSheetManager from "./BalanceSheetManager";
+import AccountingV3Workbench from "./AccountingV3Workbench";
 import { RotaryYear } from "@/lib/events";
 import { fetchRotaryYears } from "@/lib/supabaseData";
 import { supabase } from "@/src/lib/supabase";
@@ -47,10 +48,18 @@ type AccountingEntry = {
   category: string;
   description: string;
   amount: number;
+  accountId: string;
   paymentMethod: string;
   referenceNo: string;
   isPassThrough: boolean;
   note: string;
+};
+
+type AccountingAccount = {
+  id: string;
+  rotaryYearId: string;
+  name: string;
+  isActive: boolean;
 };
 
 
@@ -123,7 +132,7 @@ type ReportRow = {
   executionRate: string;
 };
 
-const tabs = ["收支登錄", "每月收支報表", "年度預算", "資產負債表"] as const;
+const tabs = ["會計總覽", "收支登錄", "每月收支報表", "年度預算", "資產負債表"] as const;
 const buttonShadow =
   "shadow-[6px_6px_12px_rgba(0,0,0,0.18),-4px_-4px_10px_rgba(255,255,255,0.85)] active:translate-y-1 active:shadow-inner";
 const emptyEntry = {
@@ -134,17 +143,19 @@ const emptyEntry = {
   category: "",
   description: "",
   amount: 0,
-  paymentMethod: "頧董",
+  accountId: "",
+  paymentMethod: "轉帳",
   referenceNo: "",
   isPassThrough: false,
   note: "",
 };
 
 export default function AccountingPage() {
-  const [tab, setTab] = useState<(typeof tabs)[number]>("每月收支報表");
+  const [tab, setTab] = useState<(typeof tabs)[number]>("會計總覽");
   const [years, setYears] = useState<RotaryYear[]>([]);
   const [categories, setCategories] = useState<AccountingCategory[]>([]);
   const [entries, setEntries] = useState<AccountingEntry[]>([]);
+  const [accounts, setAccounts] = useState<AccountingAccount[]>([]);
   const [balanceCategories, setBalanceCategories] = useState<AccountingBalanceCategory[]>([]);
   const [balanceSnapshot, setBalanceSnapshot] = useState<AccountingBalanceSnapshot | null>(null);
   const [balanceValues, setBalanceValues] = useState<AccountingBalanceValue[]>([]);
@@ -162,20 +173,23 @@ export default function AccountingPage() {
   async function loadData() {
     try {
       setErrorMessage("");
-      const [loadedYears, categoryRows, entryRows, closeRows] = await Promise.all([
+      const [loadedYears, categoryRows, entryRows, accountRows, closeRows] = await Promise.all([
         fetchRotaryYears(),
         supabase.from("accounting_categories").select("*").order("sort_order"),
         supabase.from("accounting_entries").select("*").order("entry_date", { ascending: false }),
+        supabase.from("accounting_accounts").select("*").order("sort_order"),
         supabase.from("accounting_month_closes").select("*").order("report_month", { ascending: false }),
       ]);
       if (categoryRows.error) throw categoryRows.error;
       if (entryRows.error) throw entryRows.error;
+      if (accountRows.error) throw accountRows.error;
       if (closeRows.error) throw closeRows.error;
 
       const activeYear = loadedYears.find((year) => year.isActive) ?? loadedYears[0];
       setYears(loadedYears);
       setCategories((categoryRows.data ?? []).map(mapCategory));
       setEntries((entryRows.data ?? []).map(mapEntry));
+      setAccounts((accountRows.data ?? []).map(mapAccount));
       setMonthCloses((closeRows.data ?? []).map(mapMonthClose));
       if (activeYear) {
         const defaultMonth = activeYear.startDate.slice(0, 7);
@@ -298,11 +312,19 @@ export default function AccountingPage() {
       entry.entryDate <= monthEnd
   );
   const formCategories = yearCategories.filter((category) => category.entryType === form.entryType);
+  const formAccounts = accounts.filter((account) => account.rotaryYearId === form.rotaryYearId && account.isActive);
   const currentClose = monthCloses.find(
     (close) => close.rotaryYearId === yearId && close.reportMonth === month
   );
   const report = useMemo(
-    () => buildReport(yearCategories, monthEntries, yearToDateEntries, balanceCategories, balanceSnapshot, balanceValues),
+    () => buildReport(
+      yearCategories,
+      monthEntries.filter((entry) => !entry.isPassThrough),
+      yearToDateEntries.filter((entry) => !entry.isPassThrough),
+      balanceCategories,
+      balanceSnapshot,
+      balanceValues
+    ),
     [yearCategories, monthEntries, yearToDateEntries, balanceCategories, balanceSnapshot, balanceValues]
   );
   const checks = buildReportChecks(yearCategories, monthEntries, report);
@@ -366,6 +388,7 @@ export default function AccountingPage() {
       category: entry.category,
       description: entry.description,
       amount: entry.amount,
+      accountId: entry.accountId,
       paymentMethod: entry.paymentMethod,
       referenceNo: entry.referenceNo,
       isPassThrough: entry.isPassThrough,
@@ -548,7 +571,7 @@ export default function AccountingPage() {
         {message ? <Notice tone="success">{message}</Notice> : null}
         {errorMessage ? <Notice tone="error">{errorMessage}</Notice> : null}
 
-        <section className="grid grid-cols-2 gap-2 sm:grid-cols-4 print:hidden">
+        <section className="grid grid-cols-2 gap-2 sm:grid-cols-5 print:hidden">
           {tabs.map((item) => (
             <button
               key={item}
@@ -607,11 +630,31 @@ export default function AccountingPage() {
           </label>
         </section>
 
+        {tab === "會計總覽" ? (
+          <AccountingV3Workbench
+            key={`${yearId}-${month}`}
+            years={years}
+            yearId={yearId}
+            month={month}
+            cutoffDate={monthEnd}
+            monthClosed={currentClose?.status === "closed"}
+            onRefresh={loadData}
+            onEditEntry={(entryId) => {
+              const entry = entries.find((item) => item.id === entryId);
+              if (entry) editEntry(entry);
+            }}
+            onOpenBalanceSheet={() => setTab("資產負債表")}
+            onOpenMonthlyReport={() => setTab("每月收支報表")}
+            onCloseMonth={() => void closeMonth()}
+          />
+        ) : null}
+
         {tab === "收支登錄" ? (
           <AccountingEntryTab
             form={form}
             editingId={editingId}
             formCategories={formCategories}
+            formAccounts={formAccounts}
             entries={yearToDateEntries}
             monthCloses={monthCloses}
             onSubmit={saveEntry}
@@ -677,6 +720,7 @@ function AccountingEntryTab({
   form,
   editingId,
   formCategories,
+  formAccounts,
   entries,
   monthCloses,
   onSubmit,
@@ -688,6 +732,7 @@ function AccountingEntryTab({
   form: typeof emptyEntry;
   editingId: string | null;
   formCategories: AccountingCategory[];
+  formAccounts: AccountingAccount[];
   entries: AccountingEntry[];
   monthCloses: MonthClose[];
   onSubmit: (event: FormEvent<HTMLFormElement>) => void;
@@ -732,7 +777,19 @@ function AccountingEntryTab({
         </label>
         <Input label="摘要" value={form.description} onChange={(value) => onChange({ ...form, description: value })} required />
         <Input label="金額" type="number" value={String(form.amount)} onChange={(value) => onChange({ ...form, amount: Number(value) || 0 })} required />
-        <Input label="付款方式" value={form.paymentMethod} onChange={(value) => onChange({ ...form, paymentMethod: value })} />
+        <label className="block">
+          <span className="text-sm font-bold">收付款帳戶</span>
+          <select value={form.accountId} onChange={(event) => onChange({ ...form, accountId: event.target.value })} className="mt-2 w-full rounded-2xl border border-[#E5D9BD] bg-white px-4 py-3" required>
+            <option value="">選擇實際帳戶</option>
+            {formAccounts.map((account) => <option key={account.id} value={account.id}>{account.name}</option>)}
+          </select>
+        </label>
+        <label className="block">
+          <span className="text-sm font-bold">付款方式</span>
+          <select value={form.paymentMethod} onChange={(event) => onChange({ ...form, paymentMethod: event.target.value })} className="mt-2 w-full rounded-2xl border border-[#E5D9BD] bg-white px-4 py-3">
+            <option>轉帳</option><option>信用卡扣</option><option>現金</option>
+          </select>
+        </label>
         <Input label="憑證或參考編號" value={form.referenceNo} onChange={(value) => onChange({ ...form, referenceNo: value })} />
         <label className="flex items-center gap-2 text-sm font-bold">
           <input type="checkbox" checked={form.isPassThrough} onChange={(event) => onChange({ ...form, isPassThrough: event.target.checked })} />
@@ -1788,6 +1845,7 @@ function mapEntry(row: Record<string, unknown>): AccountingEntry {
     category: text(row.category),
     description: text(row.description),
     amount: number(row.amount),
+    accountId: text(row.account_id),
     paymentMethod: text(row.payment_method),
     referenceNo: text(row.reference_no),
     isPassThrough: Boolean(row.is_pass_through),
@@ -1805,6 +1863,7 @@ function toEntryRow(entry: AccountingEntry) {
     category: entry.category,
     description: entry.description,
     amount: entry.amount,
+    account_id: entry.accountId || null,
     payment_method: entry.paymentMethod,
     reference_no: entry.referenceNo,
     is_pass_through: entry.isPassThrough,
@@ -1882,6 +1941,15 @@ function formatCurrency(value: number) {
 function toRocMonth(month: string) {
   const [year, monthNumber] = month.split("-");
   return "民國 " + (Number(year) - 1911) + " 年 " + Number(monthNumber) + " 月";
+}
+
+function mapAccount(row: Record<string, unknown>): AccountingAccount {
+  return {
+    id: text(row.id),
+    rotaryYearId: text(row.rotary_year_id),
+    name: text(row.name),
+    isActive: row.is_active !== false,
+  };
 }
 
 function getCurrentMonth() {

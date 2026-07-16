@@ -3,6 +3,7 @@ import { MeetingAttendance } from "@/lib/attendance";
 import { DuesLineItem, DuesRecord, PaymentMethod } from "@/lib/dues";
 import { EventItem, RotaryYear } from "@/lib/events";
 import { MemberLeavePeriod } from "@/lib/memberLeave";
+import { MemberFeeRule, MemberRole } from "@/lib/memberFeeRules";
 import { Member, normalizeMember, sortMembersByName } from "@/lib/members";
 import { ProgramItem } from "@/lib/programs";
 
@@ -65,6 +66,49 @@ export async function upsertMemberLeavePeriod(period: MemberLeavePeriod) {
     .single();
   if (error) throw error;
   return mapMemberLeavePeriodFromRow(data);
+}
+
+export async function fetchMemberRoles(memberId?: string, rotaryYearId?: string) {
+  let query = supabase
+    .from("member_roles")
+    .select("*")
+    .order("start_date", { ascending: false });
+  if (memberId) query = query.eq("member_id", memberId);
+  if (rotaryYearId) query = query.eq("rotary_year_id", rotaryYearId);
+  const { data, error } = await query;
+  if (error) throw error;
+  return (data ?? []).map(mapMemberRoleFromRow);
+}
+
+export async function upsertMemberRole(role: MemberRole) {
+  const { data, error } = await supabase
+    .from("member_roles")
+    .upsert(mapMemberRoleToRow(role), { onConflict: "id" })
+    .select()
+    .single();
+  if (error) throw error;
+  return mapMemberRoleFromRow(data);
+}
+
+export async function fetchMemberFeeRules(rotaryYearId?: string) {
+  let query = supabase
+    .from("member_fee_rules")
+    .select("*")
+    .order("priority", { ascending: true });
+  if (rotaryYearId) query = query.eq("rotary_year_id", rotaryYearId);
+  const { data, error } = await query;
+  if (error) throw error;
+  return (data ?? []).map(mapMemberFeeRuleFromRow);
+}
+
+export async function upsertMemberFeeRule(rule: MemberFeeRule) {
+  const { data, error } = await supabase
+    .from("member_fee_rules")
+    .upsert(mapMemberFeeRuleToRow(rule), { onConflict: "id" })
+    .select()
+    .single();
+  if (error) throw error;
+  return mapMemberFeeRuleFromRow(data);
 }
 
 export async function fetchEvents() {
@@ -389,6 +433,62 @@ function mapMemberLeavePeriodToRow(period: MemberLeavePeriod) {
     annual_fee_amount: period.annualFeeAmount,
     is_active: period.isActive,
     note: period.note,
+  };
+}
+
+function mapMemberRoleFromRow(row: DbRecord): MemberRole {
+  return {
+    id: text(row.id),
+    memberId: text(row.member_id),
+    rotaryYearId: text(row.rotary_year_id),
+    roleType: text(row.role_type) as MemberRole["roleType"],
+    roleName: text(row.role_name),
+    startDate: text(row.start_date),
+    endDate: text(row.end_date),
+    isActive: Boolean(row.is_active),
+    createdAt: text(row.created_at) || new Date().toISOString(),
+    updatedAt: text(row.updated_at) || new Date().toISOString(),
+  };
+}
+
+function mapMemberRoleToRow(role: MemberRole) {
+  return {
+    ...(role.id ? { id: role.id } : {}),
+    member_id: role.memberId,
+    rotary_year_id: role.rotaryYearId,
+    role_type: role.roleType,
+    role_name: role.roleName,
+    start_date: emptyToNull(role.startDate),
+    end_date: emptyToNull(role.endDate),
+    is_active: role.isActive,
+  };
+}
+
+function mapMemberFeeRuleFromRow(row: DbRecord): MemberFeeRule {
+  return {
+    id: text(row.id),
+    rotaryYearId: text(row.rotary_year_id),
+    feeType: text(row.fee_type) as MemberFeeRule["feeType"],
+    conditionType: text(row.condition_type) as MemberFeeRule["conditionType"],
+    conditionValue: text(row.condition_value),
+    amount: number(row.amount),
+    priority: number(row.priority),
+    isActive: Boolean(row.is_active),
+    createdAt: text(row.created_at) || new Date().toISOString(),
+    updatedAt: text(row.updated_at) || new Date().toISOString(),
+  };
+}
+
+function mapMemberFeeRuleToRow(rule: MemberFeeRule) {
+  return {
+    ...(rule.id ? { id: rule.id } : {}),
+    rotary_year_id: rule.rotaryYearId,
+    fee_type: rule.feeType,
+    condition_type: rule.conditionType,
+    condition_value: rule.conditionValue,
+    amount: rule.amount,
+    priority: rule.priority,
+    is_active: rule.isActive,
   };
 }
 

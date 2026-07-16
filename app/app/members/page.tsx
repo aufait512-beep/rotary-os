@@ -17,11 +17,22 @@ import {
   MemberLeavePeriod,
 } from "@/lib/memberLeave";
 import {
+  emptyMemberRole,
+  isRoleActiveOnDate,
+  memberRoleLabel,
+  memberRoleOptions,
+  MemberRole,
+} from "@/lib/memberFeeRules";
+import { RotaryYear } from "@/lib/events";
+import {
   deleteMember,
   fetchMemberLeavePeriods,
   fetchMembers,
+  fetchMemberRoles,
+  fetchRotaryYears,
   insertMember,
   upsertMemberLeavePeriod,
+  upsertMemberRole,
   upsertMember,
 } from "@/lib/supabaseData";
 
@@ -29,6 +40,7 @@ type MemberFormState = Omit<Member, "id" | "createdAt" | "note">;
 type MemberField = keyof MemberFormState;
 type LeaveFormState = Omit<MemberLeavePeriod, "id" | "memberId" | "createdAt" | "updatedAt">;
 type LeaveFilter = "all" | "normal" | "on_leave";
+type RoleFormState = Omit<MemberRole, "id" | "memberId" | "createdAt" | "updatedAt">;
 
 const buttonShadow =
   "shadow-[6px_6px_12px_rgba(0,0,0,0.18),-4px_-4px_10px_rgba(255,255,255,0.85)] active:translate-y-1 active:shadow-inner";
@@ -112,11 +124,14 @@ const detailFields: { label: string; value: (member: Member) => string }[] = [
 export default function MembersPage() {
   const [members, setMembers] = useState<Member[]>([]);
   const [leavePeriods, setLeavePeriods] = useState<MemberLeavePeriod[]>([]);
+  const [memberRoles, setMemberRoles] = useState<MemberRole[]>([]);
+  const [years, setYears] = useState<RotaryYear[]>([]);
   const [form, setForm] = useState<MemberFormState>(emptyMemberForm);
   const [editingId, setEditingId] = useState<string | null>(null);
   const [searchTerm, setSearchTerm] = useState("");
   const [leaveFilter, setLeaveFilter] = useState<LeaveFilter>("all");
   const [expandedLeaveMemberId, setExpandedLeaveMemberId] = useState("");
+  const [expandedRoleMemberId, setExpandedRoleMemberId] = useState("");
   const [importMessage, setImportMessage] = useState("");
   const [selectedMember, setSelectedMember] = useState<Member | null>(null);
   const [isFormOpen, setIsFormOpen] = useState(false);
@@ -180,12 +195,16 @@ export default function MembersPage() {
   async function loadMembers() {
     try {
       setErrorMessage("");
-      const [loadedMembers, loadedLeavePeriods] = await Promise.all([
+      const [loadedMembers, loadedLeavePeriods, loadedRoles, loadedYears] = await Promise.all([
         fetchMembers(),
         fetchMemberLeavePeriods(),
+        fetchMemberRoles(),
+        fetchRotaryYears(),
       ]);
       setMembers(loadedMembers);
       setLeavePeriods(loadedLeavePeriods);
+      setMemberRoles(loadedRoles);
+      setYears(loadedYears);
     } catch (error) {
       setErrorMessage(getErrorMessage(error, "社友資料讀取失敗"));
     }
@@ -351,6 +370,15 @@ export default function MembersPage() {
             period.id === savedPeriod.id ? savedPeriod : period
           )
         : [savedPeriod, ...currentPeriods];
+    });
+  }
+
+  function handleRoleSaved(savedRole: MemberRole) {
+    setMemberRoles((currentRoles) => {
+      const exists = currentRoles.some((role) => role.id === savedRole.id);
+      return exists
+        ? currentRoles.map((role) => (role.id === savedRole.id ? savedRole : role))
+        : [savedRole, ...currentRoles];
     });
   }
 
@@ -583,6 +611,10 @@ export default function MembersPage() {
               const leaveStatus = isMemberOnLeave(member.id, today, leavePeriods);
               const leaveLabel = getMemberLeaveLabel(member.id, today, leavePeriods);
               const isLeaveOpen = expandedLeaveMemberId === member.id;
+              const isRoleOpen = expandedRoleMemberId === member.id;
+              const currentRoles = memberRoles.filter(
+                (role) => role.memberId === member.id && isRoleActiveOnDate(role, today)
+              );
 
               return (
                 <article
@@ -620,18 +652,40 @@ export default function MembersPage() {
                       <p>行動電話：{member.mobile || "-"}</p>
                       <p>生日月份：{member.birthdayMonth || "-"}</p>
                     </div>
+                    {currentRoles.length > 0 ? (
+                      <div className="mt-3 flex flex-wrap gap-2">
+                        {currentRoles.map((role) => (
+                          <span key={role.id} className="rounded-full bg-[#F7C948] px-3 py-1 text-xs font-bold">
+                            {memberRoleLabel(role.roleType, role.roleName)}
+                          </span>
+                        ))}
+                      </div>
+                    ) : null}
                   </button>
-                  <button
-                    type="button"
-                    onClick={() =>
-                      setExpandedLeaveMemberId((currentId) =>
-                        currentId === member.id ? "" : member.id
-                      )
-                    }
-                    className={`mt-4 w-full rounded-2xl bg-[#F7C948] py-3 text-sm font-bold ${buttonShadow}`}
-                  >
-                    {isLeaveOpen ? "收合長假管理" : "長假管理"}
-                  </button>
+                  <div className="mt-4 grid grid-cols-1 gap-3 sm:grid-cols-2">
+                    <button
+                      type="button"
+                      onClick={() => setExpandedRoleMemberId((currentId) => currentId === member.id ? "" : member.id)}
+                      className={`rounded-2xl bg-[#F7C948] py-3 text-sm font-bold ${buttonShadow}`}
+                    >
+                      {isRoleOpen ? "收合社費身分／職務" : "社費身分／職務"}
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => setExpandedLeaveMemberId((currentId) => currentId === member.id ? "" : member.id)}
+                      className={`rounded-2xl bg-white py-3 text-sm font-bold ${buttonShadow}`}
+                    >
+                      {isLeaveOpen ? "收合長假管理" : "長假管理"}
+                    </button>
+                  </div>
+                  {isRoleOpen ? (
+                    <MemberRolePanel
+                      member={member}
+                      years={years}
+                      roles={memberRoles.filter((role) => role.memberId === member.id)}
+                      onSaved={handleRoleSaved}
+                    />
+                  ) : null}
                   {isLeaveOpen ? (
                     <MemberLeavePanel
                       member={member}
@@ -688,6 +742,186 @@ function StatTile({ label, value }: { label: string; value: number }) {
       <p className="text-xs text-[#173B73]/70">{label}</p>
       <p className="mt-1 text-xl font-bold">{value}</p>
     </div>
+  );
+}
+
+
+function MemberRolePanel({ member, years, roles, onSaved }: {
+  member: Member;
+  years: RotaryYear[];
+  roles: MemberRole[];
+  onSaved: (role: MemberRole) => void;
+}) {
+  const defaultYear = years.find((year) => year.isActive) ?? years[0];
+  const blankForm = (): RoleFormState => ({
+    ...emptyMemberRole,
+    rotaryYearId: defaultYear?.id ?? "",
+    startDate: defaultYear?.startDate ?? getTodayDate(),
+  });
+  const [form, setForm] = useState<RoleFormState>(blankForm);
+  const [editingId, setEditingId] = useState("");
+  const [message, setMessage] = useState("");
+  const [errorMessage, setErrorMessage] = useState("");
+
+  function resetRoleForm() {
+    setForm(blankForm());
+    setEditingId("");
+  }
+
+  function editRole(role: MemberRole) {
+    setEditingId(role.id);
+    setForm({
+      rotaryYearId: role.rotaryYearId,
+      roleType: role.roleType,
+      roleName: role.roleName,
+      startDate: role.startDate,
+      endDate: role.endDate,
+      isActive: role.isActive,
+    });
+    setMessage("");
+    setErrorMessage("");
+  }
+
+  async function saveRole(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+    setMessage("");
+    setErrorMessage("");
+    if (!form.rotaryYearId || !form.startDate) {
+      setErrorMessage("請選擇年度並填寫開始日期。");
+      return;
+    }
+    if (form.endDate && form.endDate < form.startDate) {
+      setErrorMessage("結束日期不可早於開始日期。");
+      return;
+    }
+    const now = new Date().toISOString();
+    try {
+      const saved = await upsertMemberRole({
+        ...form,
+        id: editingId,
+        memberId: member.id,
+        roleName: form.roleName.trim(),
+        createdAt: now,
+        updatedAt: now,
+      });
+      onSaved(saved);
+      setMessage(editingId ? "職務紀錄已更新。" : "職務紀錄已新增。");
+      resetRoleForm();
+    } catch (error) {
+      setErrorMessage(`職務紀錄儲存失敗：${getRawErrorMessage(error)}`);
+    }
+  }
+
+  async function updateRole(role: MemberRole, changes: Partial<MemberRole>, success: string) {
+    setMessage("");
+    setErrorMessage("");
+    try {
+      const saved = await upsertMemberRole({ ...role, ...changes, updatedAt: new Date().toISOString() });
+      onSaved(saved);
+      setMessage(success);
+      if (editingId === role.id) resetRoleForm();
+    } catch (error) {
+      setErrorMessage(`職務紀錄更新失敗：${getRawErrorMessage(error)}`);
+    }
+  }
+
+  return (
+    <section className="mt-4 space-y-4 rounded-2xl border border-[#173B73]/15 bg-[#F8F3E8]/70 p-4">
+      <div>
+        <h4 className="font-bold">社友職務與資深身分</h4>
+        <p className="mt-1 text-xs font-semibold text-[#173B73]/65">
+          費率依計費月份 1 日仍有效的職務、資深身分及長假狀態判定。
+        </p>
+      </div>
+      <form onSubmit={saveRole} className="space-y-3 rounded-2xl bg-white p-4">
+        <label className="block">
+          <span className="text-sm font-bold">扶輪年度</span>
+          <select required value={form.rotaryYearId}
+            onChange={(event) => setForm((current) => ({ ...current, rotaryYearId: event.target.value }))}
+            className="mt-2 w-full rounded-xl border border-[#E5D9BD] bg-white px-3 py-3">
+            <option value="">請選擇年度</option>
+            {years.map((year) => <option key={year.id} value={year.id}>{year.displayName || year.name}</option>)}
+          </select>
+        </label>
+        <label className="block">
+          <span className="text-sm font-bold">身分／職務</span>
+          <select value={form.roleType}
+            onChange={(event) => setForm((current) => ({ ...current, roleType: event.target.value as MemberRole["roleType"] }))}
+            className="mt-2 w-full rounded-xl border border-[#E5D9BD] bg-white px-3 py-3">
+            {memberRoleOptions.map((option) => <option key={option.value} value={option.value}>{option.label}</option>)}
+          </select>
+        </label>
+        <label className="block">
+          <span className="text-sm font-bold">職務名稱</span>
+          <input value={form.roleName}
+            onChange={(event) => setForm((current) => ({ ...current, roleName: event.target.value }))}
+            placeholder="例如：理事、監事、出席主委"
+            className="mt-2 w-full rounded-xl border border-[#E5D9BD] bg-white px-3 py-3" />
+        </label>
+        <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
+          <label className="block">
+            <span className="text-sm font-bold">開始日期</span>
+            <input required type="date" value={form.startDate}
+              onChange={(event) => setForm((current) => ({ ...current, startDate: event.target.value }))}
+              className="mt-2 w-full rounded-xl border border-[#E5D9BD] bg-white px-3 py-3" />
+          </label>
+          <label className="block">
+            <span className="text-sm font-bold">結束日期</span>
+            <input type="date" value={form.endDate}
+              onChange={(event) => setForm((current) => ({ ...current, endDate: event.target.value }))}
+              className="mt-2 w-full rounded-xl border border-[#E5D9BD] bg-white px-3 py-3" />
+          </label>
+        </div>
+        <label className="flex items-center gap-3 text-sm font-bold">
+          <input type="checkbox" checked={form.isActive}
+            onChange={(event) => setForm((current) => ({ ...current, isActive: event.target.checked }))}
+            className="h-5 w-5" />
+          啟用此職務紀錄
+        </label>
+        <div className="flex flex-wrap gap-3">
+          <button type="submit" className={`rounded-xl bg-[#F7C948] px-4 py-3 text-sm font-bold ${buttonShadow}`}>
+            {editingId ? "儲存職務修改" : "新增職務紀錄"}
+          </button>
+          {editingId ? <button type="button" onClick={resetRoleForm}
+            className={`rounded-xl bg-white px-4 py-3 text-sm font-bold ${buttonShadow}`}>取消編輯</button> : null}
+        </div>
+      </form>
+      {message ? <p className="text-sm font-bold text-emerald-700">{message}</p> : null}
+      {errorMessage ? <p className="text-sm font-bold text-red-700">{errorMessage}</p> : null}
+      <div className="space-y-3">
+        {roles.length === 0 ? <p className="rounded-xl bg-white p-3 text-sm">尚無職務歷程。</p> :
+          [...roles].sort((a, b) => b.startDate.localeCompare(a.startDate)).map((role) => {
+            const year = years.find((item) => item.id === role.rotaryYearId);
+            return (
+              <article key={role.id} className="rounded-xl bg-white p-3 text-sm">
+                <div className="flex flex-wrap items-start justify-between gap-2">
+                  <div>
+                    <p className="font-bold">{memberRoleLabel(role.roleType, role.roleName)}</p>
+                    <p className="mt-1 text-[#173B73]/70">
+                      {year?.displayName || year?.name || "未指定年度"} · {role.startDate}
+                      {role.endDate ? ` 至 ${role.endDate}` : " 起"}
+                    </p>
+                  </div>
+                  <span className={`rounded-full px-3 py-1 text-xs font-bold text-white ${role.isActive ? "bg-[#173B73]" : "bg-gray-500"}`}>
+                    {role.isActive ? "啟用" : "已停用"}
+                  </span>
+                </div>
+                <div className="mt-3 flex flex-wrap gap-2">
+                  <button type="button" onClick={() => editRole(role)}
+                    className={`rounded-xl bg-[#F7C948] px-3 py-2 text-xs font-bold ${buttonShadow}`}>編輯</button>
+                  {role.isActive ? <>
+                    <button type="button" onClick={() => updateRole(role, { endDate: getTodayDate() }, "職務結束日期已更新。")}
+                      className={`rounded-xl bg-white px-3 py-2 text-xs font-bold ${buttonShadow}`}>今日結束</button>
+                    <button type="button" onClick={() => updateRole(role, { isActive: false }, "錯誤職務紀錄已停用。")}
+                      className={`rounded-xl bg-white px-3 py-2 text-xs font-bold text-red-700 ${buttonShadow}`}>停用錯誤紀錄</button>
+                  </> : <button type="button" onClick={() => updateRole(role, { isActive: true }, "職務紀錄已重新啟用。")}
+                    className={`rounded-xl bg-white px-3 py-2 text-xs font-bold ${buttonShadow}`}>重新啟用</button>}
+                </div>
+              </article>
+            );
+          })}
+      </div>
+    </section>
   );
 }
 

@@ -1,4 +1,4 @@
-﻿"use client";
+"use client";
 
 import Link from "next/link";
 import { FormEvent, ReactNode, useEffect, useMemo, useState } from "react";
@@ -10,15 +10,16 @@ import {
   PaymentMethod,
 } from "@/lib/dues";
 import { defaultEventTimes, emptyEventItem, EventItem, RotaryYear } from "@/lib/events";
-import {
-  isMemberOnLeaveDuringMonth,
-  MemberLeavePeriod,
-} from "@/lib/memberLeave";
+import { MemberLeavePeriod } from "@/lib/memberLeave";
+import { assessMemberFees, MemberFeeAssessment, memberRoleLabel } from "@/lib/memberFeeRules";
+import FeeRuleSettings from "./FeeRuleSettings";
 import { formatMemberName, Member } from "@/lib/members";
 import {
   fetchDuesRecords,
   fetchEvents,
+  fetchMemberFeeRules,
   fetchMemberLeavePeriods,
+  fetchMemberRoles,
   fetchMembers,
   fetchRotaryYears,
   upsertDuesRecord,
@@ -80,6 +81,7 @@ type BatchRow = {
   rotaryFoundation: number;
   passThrough: number;
   leavePeriod?: MemberLeavePeriod;
+  assessment: MemberFeeAssessment;
 };
 
 type BatchMoneyField =
@@ -427,41 +429,37 @@ export default function AssistantPage() {
     setErrorMessage("");
     setBatchMessage("");
     setBatchProgress("");
-
     try {
-      const [members, records, leavePeriods] = await Promise.all([
-        fetchMembers(),
-        fetchDuesRecords(),
-        fetchMemberLeavePeriods(),
+      const selectedYear = years.find((year) =>
+        year.startDate.slice(0, 7) <= batchMonth && year.endDate.slice(0, 7) >= batchMonth
+      );
+      if (!selectedYear) {
+        setErrorMessage("找不到此月份所屬的扶輪年度，請先建立年度資料。");
+        return;
+      }
+      const [loadedMembers, records, leavePeriods, roles, rules] = await Promise.all([
+        fetchMembers(), fetchDuesRecords(), fetchMemberLeavePeriods(),
+        fetchMemberRoles(undefined, selectedYear.id), fetchMemberFeeRules(selectedYear.id),
       ]);
-      const activeMembers = members.filter((member) => member.status !== "inactive");
-      const rows = activeMembers.map((member) => {
+      const rows = loadedMembers.filter((member) => member.status !== "inactive").map((member) => {
         const existingRecord = records.some(
           (record) => record.memberId === member.id && record.periodMonth === batchMonth
         );
-        const leaveStatus = isMemberOnLeaveDuringMonth(
-          member.id,
-          batchMonth,
-          leavePeriods
-        );
+        const assessment = assessMemberFees({
+          memberId: member.id, rotaryYearId: selectedYear.id, periodMonth: batchMonth,
+          roles, rules, leavePeriods,
+        });
         return {
-          member,
-          selected: !existingRecord,
-          exists: existingRecord,
+          member, selected: !existingRecord, exists: existingRecord,
           previousBalance: findPreviousBalance(member.id, batchMonth, records),
-          meal: 0,
-          annualFee: leaveStatus.isOnLeave
-            ? leaveStatus.annualFeeAmount || 1000
-            : 0,
-          specialDonation: 0,
-          redBox: 0,
-          rotaryFoundation: 270,
-          passThrough: 0,
-          leavePeriod: leaveStatus.leavePeriod,
+          meal: 0, annualFee: assessment.annualFee.amount,
+          specialDonation: assessment.specialDonation.amount, redBox: 0,
+          rotaryFoundation: 270, passThrough: 0,
+          leavePeriod: assessment.leavePeriod, assessment,
         };
       });
       setBatchRows(rows);
-      setBatchMessage(`已產生 ${batchMonth} 批次預覽，請確認後再建立。`);
+      setBatchMessage(`已依 ${batchMonth}-01 的身分狀態產生批次預覽，請確認後再建立。`);
     } catch (error) {
       console.error(error);
       setErrorMessage(getErrorMessage(error, "批次預覽建立失敗"));
@@ -988,6 +986,10 @@ export default function AssistantPage() {
           onToggle={() => toggleSection("batch")}
         >
           <div className="space-y-5">
+            <FeeRuleSettings years={years} onRulesChanged={() => {
+              setBatchRows([]);
+              setBatchMessage("費率規則已更新，請重新建立批次預覽。");
+            }} />
             {batchMessage ? (
               <p className="rounded-2xl border border-green-200 bg-green-50 p-4 text-sm font-bold text-green-700">
                 {batchMessage}
@@ -1039,14 +1041,19 @@ export default function AssistantPage() {
                                 已存在
                               </span>
                             ) : null}
-                            {row.leavePeriod ? (
-                              <span className="rounded-full bg-[#F47C6C] px-3 py-1 text-xs font-bold text-white">
-                                長假常年費 {formatCurrency(row.annualFee)}
-                              </span>
-                            ) : null}
+                            <span className="rounded-full bg-[#173B73] px-3 py-1 text-xs font-bold text-white">{row.assessment.identity}</span>
+                            {row.assessment.isOnLeave ? <span className="rounded-full bg-[#F47C6C] px-3 py-1 text-xs font-bold text-white">長假</span> : null}
+                            {row.assessment.isSenior ? <span className="rounded-full bg-[#C99700] px-3 py-1 text-xs font-bold text-white">資深社友</span> : null}
                           </div>
                         </div>
-                        <div className="mt-3 grid grid-cols-2 gap-2 text-sm">
+                        <div className="mt-3 rounded-xl bg-[#F8F3E8] p-3 text-sm font-semibold">
+                          <p>常年費來源：{row.assessment.annualFee.source} · {formatCurrency(row.annualFee)}</p>
+                          <p className="mt-1">特別捐來源：{row.assessment.specialDonation.source} · {formatCurrency(row.specialDonation)}</p>
+                          {row.assessment.activeRoles.length > 0 ? <p className="mt-1 text-[#173B73]/70">
+                            有效職務：{row.assessment.activeRoles.map((role) => memberRoleLabel(role.roleType, role.roleName)).join("、")}
+                          </p> : null}
+                        </div>
+                        <div className="mt-3 grid grid-cols-1 gap-2 text-sm min-[390px]:grid-cols-2">
                           <MoneyInput label="前期未繳" value={row.previousBalance} onChange={(value) => updateBatchMoney(row.member.id, "previousBalance", value)} />
                           <MoneyInput label="餐費" value={row.meal} onChange={(value) => updateBatchMoney(row.member.id, "meal", value)} />
                           <MoneyInput label="常年費" value={row.annualFee} onChange={(value) => updateBatchMoney(row.member.id, "annualFee", value)} />
@@ -1358,7 +1365,7 @@ function buildDuesRecordFromBatchRow(row: BatchRow, periodMonth: string): DuesRe
     periodMonth,
     previousBalance: row.previousBalance,
     currentDue: getBatchCurrentDue(row),
-    paymentMethod: "頧董" as PaymentMethod,
+    paymentMethod: "轉帳" as PaymentMethod,
     createdAt: new Date().toISOString(),
     lineItems,
   };
@@ -1368,8 +1375,8 @@ function buildBatchLineItems(row: BatchRow): DuesLineItem[] {
   const createdAt = new Date().toISOString();
   const items: DuesLineItem[] = [];
   addBatchLineItem(items, "meal", "餐費", row.meal, createdAt);
-  addBatchLineItem(items, "annual_fee", "常年費", row.annualFee, createdAt);
-  addBatchLineItem(items, "special_donation", "特別捐", row.specialDonation, createdAt);
+  addBatchLineItem(items, "annual_fee", "常年費", row.annualFee, createdAt, row.assessment.annualFee.source);
+  addBatchLineItem(items, "special_donation", "特別捐", row.specialDonation, createdAt, row.assessment.specialDonation.source);
   addBatchLineItem(items, "red_box", "紅箱", row.redBox, createdAt);
   addBatchLineItem(items, "rotary_foundation", "扶輪基金（代收）", row.rotaryFoundation, createdAt, "固定 NT$270");
   addBatchLineItem(items, "pass_through", "代收付", row.passThrough, createdAt);
