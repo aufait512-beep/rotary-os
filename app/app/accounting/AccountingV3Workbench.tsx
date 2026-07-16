@@ -3,6 +3,7 @@
 import { FormEvent, ReactNode, useCallback, useEffect, useMemo, useState } from "react";
 import { formatMemberName } from "@/lib/members";
 import { supabase } from "@/src/lib/supabase";
+import SmartVoucherPanel from "./SmartVoucherPanel";
 
 type EntryType = "income" | "expense";
 type Row = Record<string, unknown>;
@@ -572,6 +573,20 @@ export default function AccountingV3Workbench({
           {jadeReminders.length ? jadeReminders.map((item) => <p key={item}>- {item}</p>) : <p>目前沒有需要特別提醒的項目。</p>}
         </div>
       </section>
+
+      <SmartVoucherPanel
+        yearId={yearId}
+        month={month}
+        cutoffDate={cutoffDate}
+        monthClosed={monthClosed}
+        accounts={yearAccounts}
+        categories={activeCategories}
+        entries={monthEntries}
+        onSaved={async () => {
+          await loadData();
+          await onRefresh();
+        }}
+      />
 
       <Collapsible title="快速收支登錄" open={Boolean(openSections.quick)} onToggle={() => toggleSection("quick", setOpenSections)}>
         <div className="grid gap-5 lg:grid-cols-[minmax(0,420px)_1fr]">
