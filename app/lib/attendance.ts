@@ -107,27 +107,60 @@ export function formatAttendanceStatus(status: AttendanceResponseStatus) {
 
 export function buildAttendanceSummary(
   eventItem: EventItem,
-  records: MeetingAttendance[]
+  records: MeetingAttendance[],
+  leaveMemberIds: ReadonlySet<string> = new Set()
 ) {
-  const responded = records.filter((record) => record.responseStatus !== "pending").length;
-  const plannedAttending = records.filter((record) => record.plannedAttendance).length;
-  const guests = records.reduce((total, record) => total + record.guestCount, 0);
-  const noResponse = records.filter(
+  const isLeaveOverride = (record: MeetingAttendance) =>
+    leaveMemberIds.has(record.memberId) &&
+    record.responseStatus === "attending" &&
+    record.plannedAttendance;
+  const regularRecords = records.filter(
+    (record) => !leaveMemberIds.has(record.memberId)
+  );
+  const leaveOverrideRecords = records.filter(isLeaveOverride);
+  const includedRecords = [...regularRecords, ...leaveOverrideRecords];
+  const responded =
+    regularRecords.filter((record) => record.responseStatus !== "pending").length +
+    leaveOverrideRecords.length;
+  const regularPlannedAttending = regularRecords.filter(
+    (record) => record.plannedAttendance
+  ).length;
+  const leaveOverrideAttending = leaveOverrideRecords.length;
+  const plannedAttending = regularPlannedAttending + leaveOverrideAttending;
+  const guests = includedRecords.reduce(
+    (total, record) => total + record.guestCount,
+    0
+  );
+  const noResponse = regularRecords.filter(
     (record) => record.responseStatus === "no_response"
   ).length;
   const plannedReservationTotal = plannedAttending + guests;
+  const actualAttending = includedRecords.filter(
+    (record) => record.actualAttendance
+  ).length;
+  const actualMeals = includedRecords.filter((record) => record.actualMeal).length;
+  const mealTotal = includedRecords.reduce(
+    (total, record) => total + (record.actualMeal ? record.mealAmount : 0),
+    0
+  );
 
   return {
     totalMembers: records.length,
     responded,
+    regularPlannedAttending,
+    leaveOverrideAttending,
     plannedAttending,
     guests,
     plannedReservationTotal,
     noResponse,
+    actualAttending,
+    actualMeals,
+    mealTotal,
     copyText: [
       `第${eventItem.meetingNo || "-"}次例會出席統計`,
       "",
       `預計出席社友：${plannedAttending}人`,
+      `長假本次參加：${leaveOverrideAttending}人`,
       `眷屬／來賓：${guests}人`,
       `預計訂桌人數：${plannedReservationTotal}人`,
       `未回覆：${noResponse}人`,

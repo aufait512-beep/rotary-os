@@ -18,6 +18,9 @@ import {
   sortMembersByLeaveStatus,
 } from "@/lib/memberLeave";
 import { formatMemberName, Member, sortMembersByName } from "@/lib/members";
+import MeetingAttendanceRoster, {
+  MeetingRosterRow,
+} from "@/app/components/MeetingAttendanceRoster";
 import {
   fetchEvents,
   fetchMeetingAttendance,
@@ -62,36 +65,6 @@ export default function MeetingAttendancePanel({
       ),
     [eventItem.date, leavePeriods, members]
   );
-  const visibleRows = useMemo(() => {
-    return activeMembers
-      .map((member) => ({
-        member,
-        record: getMemberRecord(member.id, records, eventItem.id, mealAmount),
-      }))
-      .filter(({ member, record }) => {
-        const memberName = formatMemberName(member);
-        const matchesSearch =
-          !searchTerm.trim() ||
-          memberName.toLowerCase().includes(searchTerm.trim().toLowerCase());
-        const matchesFilter = filter === "all" || record.responseStatus === filter;
-        return matchesSearch && matchesFilter;
-      });
-  }, [activeMembers, eventItem.id, filter, mealAmount, records, searchTerm]);
-  const allRows = useMemo(
-    () =>
-      activeMembers.map((member) =>
-        getMemberRecord(member.id, records, eventItem.id, mealAmount)
-      ),
-    [activeMembers, eventItem.id, mealAmount, records]
-  );
-  const regularRows = useMemo(
-    () =>
-      allRows.filter(
-        (record) =>
-          !isMemberOnLeave(record.memberId, eventItem.date, leavePeriods).isOnLeave
-      ),
-    [allRows, eventItem.date, leavePeriods]
-  );
   const leaveStatusByMemberId = useMemo(
     () =>
       new Map(
@@ -102,9 +75,61 @@ export default function MeetingAttendancePanel({
       ),
     [activeMembers, eventItem.date, leavePeriods]
   );
+  const rosterRows = useMemo<MeetingRosterRow[]>(
+    () =>
+      activeMembers.map((member) => {
+        const record = getMemberRecord(
+          member.id,
+          records,
+          eventItem.id,
+          mealAmount
+        );
+        const isOnLeave = leaveStatusByMemberId.get(member.id)?.isOnLeave ?? false;
+        return {
+          member,
+          record,
+          isOnLeave,
+          isLeaveOverride: isLeaveTemporaryAttendee(record, isOnLeave),
+        };
+      }),
+    [activeMembers, eventItem.id, leaveStatusByMemberId, mealAmount, records]
+  );
+  const visibleRows = useMemo(
+    () =>
+      rosterRows.filter(({ member, record, isOnLeave, isLeaveOverride }) => {
+        const memberName = formatMemberName(member);
+        const matchesSearch =
+          !searchTerm.trim() ||
+          memberName.toLowerCase().includes(searchTerm.trim().toLowerCase());
+        const matchesFilter =
+          filter === "all" ||
+          (!isOnLeave && record.responseStatus === filter) ||
+          (isLeaveOverride && filter === "attending");
+        return matchesSearch && matchesFilter;
+      }),
+    [filter, rosterRows, searchTerm]
+  );
+  const allRows = useMemo(
+    () => rosterRows.map(({ record }) => record),
+    [rosterRows]
+  );
+  const leaveMemberIds = useMemo(
+    () =>
+      new Set(
+        rosterRows.filter(({ isOnLeave }) => isOnLeave).map(({ member }) => member.id)
+      ),
+    [rosterRows]
+  );
+  const attendanceEligibleRows = useMemo(
+    () =>
+      rosterRows
+        .filter(({ isOnLeave, isLeaveOverride }) => !isOnLeave || isLeaveOverride)
+        .map(({ record }) => record),
+    [rosterRows]
+  );
   const summary = useMemo(
-    () => buildAttendanceSummary(eventItem, regularRows),
-    [eventItem, regularRows]
+    () => buildAttendanceSummary(eventItem, allRows, leaveMemberIds),
+    [allRows, eventItem, leaveMemberIds]
   );
   const annualStats = useMemo(
     () => buildAnnualStats(allMeetingEvents, allAttendance, eventItem.rotaryYearId),
@@ -202,7 +227,7 @@ export default function MeetingAttendancePanel({
     const confirmed = window.confirm("確定要套用預計出席為實際出席嗎？");
     if (!confirmed) return;
 
-    const nextRecords = regularRows.map((record) => ({
+    const nextRecords = attendanceEligibleRows.map((record) => ({
       ...record,
       actualAttendance: record.plannedAttendance,
     }));
@@ -210,7 +235,9 @@ export default function MeetingAttendancePanel({
     try {
       setErrorMessage("");
       const savedRecords = await Promise.all(nextRecords.map(upsertMeetingAttendance));
-      setRecords(savedRecords);
+      setRecords((currentRecords) =>
+        savedRecords.reduce(upsertLocalRecord, currentRecords)
+      );
       setAllAttendance((currentRecords) =>
         savedRecords.reduce(upsertLocalRecord, currentRecords)
       );
@@ -246,12 +273,25 @@ export default function MeetingAttendancePanel({
             </p>
           ) : null}
 
-          <div className="grid grid-cols-2 gap-2 text-center text-sm font-bold sm:grid-cols-3">
+          <div className="grid grid-cols-2 gap-2 text-center text-sm font-bold sm:grid-cols-4">
             <SummaryTile label="社友總數" value={`${summary.totalMembers}人`} />
             <SummaryTile label="已回覆" value={`${summary.responded}人`} />
-            <SummaryTile label="預計出席" value={`${summary.plannedAttending}人`} />
+            <SummaryTile
+              label="一般社友預計出席"
+              value={`${summary.regularPlannedAttending}人`}
+            />
+            <SummaryTile
+              label="長假本次參加"
+              value={`${summary.leaveOverrideAttending}人`}
+            />
             <SummaryTile label="眷屬／來賓" value={`${summary.guests}人`} />
-            <SummaryTile label="預計訂桌" value={`${summary.plannedReservationTotal}人`} />
+            <SummaryTile
+              label="預計訂桌總人數"
+              value={`${summary.plannedReservationTotal}人`}
+            />
+            <SummaryTile label="實際出席" value={`${summary.actualAttending}人`} />
+            <SummaryTile label="實際用餐" value={`${summary.actualMeals}人`} />
+            <SummaryTile label="本次餐費總額" value={formatCurrency(summary.mealTotal)} />
             <SummaryTile label="未回覆" value={`${summary.noResponse}人`} />
           </div>
 
@@ -266,6 +306,11 @@ export default function MeetingAttendancePanel({
                 onBlur={() => void saveMealAmount()}
                 className="mt-2 w-full rounded-2xl border border-[#E5D9BD] bg-white px-4 py-3 text-base outline-none focus:border-[#173B73] focus:ring-2 focus:ring-[#F7C948]"
               />
+              {mealAmount <= 0 ? (
+                <span className="mt-2 block text-sm font-bold text-[#F47C6C]">
+                  本場尚未設定餐費，可在此手動輸入。
+                </span>
+              ) : null}
             </label>
             <label className="block">
               <span className="text-sm font-bold">搜尋社友</span>
@@ -308,6 +353,15 @@ export default function MeetingAttendancePanel({
               {isActualOpen ? "收合會後確認" : "會後實際出席確認"}
             </button>
           </div>
+
+          <MeetingAttendanceRoster
+            eventItem={eventItem}
+            rows={rosterRows}
+            summary={summary}
+            eventMealAmount={mealAmount || eventItem.eventMealAmount || 0}
+            onError={setErrorMessage}
+            onSuccess={setSuccessMessage}
+          />
 
           {activeMembers.length === 0 ? (
             <p className="rounded-2xl bg-white p-4 text-center font-bold text-[#173B73]/70">
@@ -368,6 +422,9 @@ function AttendanceMemberCard({
   isSaving: boolean;
   onSave: (record: MeetingAttendance) => void;
 }) {
+  const isOnLeave = leaveStatus?.isOnLeave ?? false;
+  const isLeaveOverride = isLeaveTemporaryAttendee(record, isOnLeave);
+
   function updateRecord(patch: Partial<MeetingAttendance>) {
     const nextRecord = { ...record, ...patch };
     if (patch.actualMeal && !nextRecord.mealAmount) {
@@ -378,6 +435,31 @@ function AttendanceMemberCard({
 
   function updateStatus(status: AttendanceResponseStatus) {
     onSave(applyResponseStatus(record, status));
+  }
+
+  function toggleLeaveAttendance(checked: boolean) {
+    if (checked) {
+      onSave({
+        ...record,
+        responseStatus: "attending",
+        plannedAttendance: true,
+        plannedMeal: true,
+        mealAmount: record.mealAmount || eventMealAmount,
+        includeInDues: true,
+      });
+      return;
+    }
+
+    onSave({
+      ...record,
+      responseStatus: "pending",
+      plannedAttendance: false,
+      plannedMeal: false,
+      actualAttendance: false,
+      actualMeal: false,
+      guestCount: 0,
+      includeInDues: false,
+    });
   }
 
   const annualRate =
@@ -397,7 +479,11 @@ function AttendanceMemberCard({
           </p>
         </div>
         <span className="rounded-full bg-[#173B73] px-3 py-1 text-xs font-bold text-white">
-          {isSaving ? "儲存中" : formatAttendanceStatus(record.responseStatus)}
+          {isSaving
+            ? "儲存中"
+            : isLeaveOverride
+              ? "本次參加"
+              : formatAttendanceStatus(record.responseStatus)}
         </span>
         {leaveStatus?.isOnLeave ? (
           <span className="rounded-full bg-[#F47C6C] px-3 py-1 text-xs font-bold text-white">
@@ -418,33 +504,76 @@ function AttendanceMemberCard({
         </div>
       ) : null}
 
-      <div className="mt-4 grid grid-cols-1 gap-3 sm:grid-cols-2">
-        <label className="block">
-          <span className="text-sm font-bold">回覆狀態</span>
-          <select
-            value={record.responseStatus}
-            onChange={(event) => updateStatus(event.target.value as AttendanceResponseStatus)}
-            className="mt-2 w-full rounded-2xl border border-[#E5D9BD] px-3 py-3"
-          >
-            <option value="pending">待確認</option>
-            <option value="attending">出席</option>
-            <option value="absent">不出席</option>
-            <option value="no_response">未回覆</option>
-          </select>
-        </label>
-        <NumberField
-          label="眷屬／來賓"
-          value={record.guestCount}
-          onChange={(value) => updateRecord({ guestCount: value })}
-        />
-        <ToggleField
-          label="預計出席"
-          checked={record.plannedAttendance}
-          onChange={(checked) => updateRecord({ plannedAttendance: checked })}
-        />
-      </div>
+      {isOnLeave ? (
+        <div className="mt-4 grid grid-cols-1 gap-3 sm:grid-cols-2">
+          <ToggleField
+            label="本次參加"
+            checked={isLeaveOverride}
+            onChange={toggleLeaveAttendance}
+          />
+          {isLeaveOverride ? (
+            <>
+              <ToggleField
+                label="本次用餐"
+                checked={record.plannedMeal}
+                onChange={(checked) =>
+                  updateRecord({
+                    plannedMeal: checked,
+                    mealAmount: record.mealAmount || eventMealAmount,
+                  })
+                }
+              />
+              <NumberField
+                label="眷屬／來賓"
+                value={record.guestCount}
+                onChange={(value) => updateRecord({ guestCount: value })}
+              />
+              <NumberField
+                label="本次餐費金額"
+                value={record.mealAmount}
+                onChange={(value) => updateRecord({ mealAmount: value })}
+              />
+              {eventMealAmount <= 0 ? (
+                <p className="rounded-2xl bg-[#FFF0ED] p-3 text-sm font-bold text-[#C84F42] sm:col-span-2">
+                  本場尚未設定餐費，請手動輸入本次餐費金額。
+                </p>
+              ) : null}
+            </>
+          ) : (
+            <p className="rounded-2xl bg-[#F8F3E8] p-3 text-sm font-bold text-[#173B73]/70">
+              長假期間預設不列入未回覆、預計出席及訂桌人數。
+            </p>
+          )}
+        </div>
+      ) : (
+        <div className="mt-4 grid grid-cols-1 gap-3 sm:grid-cols-2">
+          <label className="block">
+            <span className="text-sm font-bold">回覆狀態</span>
+            <select
+              value={record.responseStatus}
+              onChange={(event) => updateStatus(event.target.value as AttendanceResponseStatus)}
+              className="mt-2 w-full rounded-2xl border border-[#E5D9BD] px-3 py-3"
+            >
+              <option value="pending">待確認</option>
+              <option value="attending">出席</option>
+              <option value="absent">不出席</option>
+              <option value="no_response">未回覆</option>
+            </select>
+          </label>
+          <NumberField
+            label="眷屬／來賓"
+            value={record.guestCount}
+            onChange={(value) => updateRecord({ guestCount: value })}
+          />
+          <ToggleField
+            label="預計出席"
+            checked={record.plannedAttendance}
+            onChange={(checked) => updateRecord({ plannedAttendance: checked })}
+          />
+        </div>
+      )}
 
-      {isActualOpen ? (
+      {isActualOpen && (!isOnLeave || isLeaveOverride) ? (
         <div className="mt-4 grid grid-cols-1 gap-3 border-t border-[#E5D9BD] pt-4 sm:grid-cols-2">
           <ToggleField
             label="實際出席"
@@ -544,6 +673,17 @@ function getMemberRecord(
   return (
     records.find((record) => record.memberId === memberId) ??
     emptyMeetingAttendance(eventId, memberId, defaultMealAmount)
+  );
+}
+
+function isLeaveTemporaryAttendee(
+  record: MeetingAttendance,
+  isOnLeave: boolean
+) {
+  return (
+    isOnLeave &&
+    record.responseStatus === "attending" &&
+    record.plannedAttendance
   );
 }
 
