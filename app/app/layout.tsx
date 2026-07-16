@@ -1,9 +1,11 @@
 import type { Metadata } from "next";
+import AppFooter from "@/app/components/AppFooter";
+import { appVersion } from "@/lib/appVersion";
 import "./globals.css";
 
 export const metadata: Metadata = {
-  title: "高雄晨光扶輪社｜Rotary OS",
-  description: "高雄晨光扶輪社年度社務管理系統",
+  title: `高雄晨光扶輪社｜${appVersion.fullVersion}`,
+  description: appVersion.systemPositioning,
   manifest: "/manifest.webmanifest",
   icons: {
     icon: [
@@ -16,16 +18,6 @@ export const metadata: Metadata = {
     ],
   },
 };
-
-function AppFooter() {
-  return (
-    <footer className="bg-[#F8F3E8] px-4 py-6 text-center text-xs leading-6 text-gray-500">
-      <p>Rotary OS v1.0.0</p>
-      <p>© 2026 Jadecode Studio. All rights reserved.</p>
-      <p>Powered by Jade AI</p>
-    </footer>
-  );
-}
 
 export default function RootLayout({
   children,

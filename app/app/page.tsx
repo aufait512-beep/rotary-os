@@ -1,4 +1,5 @@
 import Link from "next/link";
+import { appVersion } from "@/lib/appVersion";
 
 const menuItems = [
   { label: "新增/管理活動", href: "/events" },
@@ -9,6 +10,7 @@ const menuItems = [
   { label: "📊 會計收支", href: "/accounting" },
   { label: "❤️ 年度捐獻計畫", href: "/donations" },
   { label: "Jade AI 助理", href: "/assistant" },
+  { label: "年度交接精靈", href: "/year-transition" },
 ];
 
 export default function Home() {
@@ -17,14 +19,14 @@ export default function Home() {
       <section className="mx-auto max-w-md">
         <div className="mb-8 text-center">
           <p className="text-sm font-semibold tracking-[0.3em]">高雄晨光扶輪社</p>
-          <h1 className="mt-3 text-3xl font-bold">Rotary OS</h1>
+          <h1 className="mt-3 text-3xl font-bold">{appVersion.productName}</h1>
           <p className="mt-2 text-sm font-semibold text-[#173B73]/70">
             高雄晨光扶輪社智慧秘書系統
           </p>
         </div>
 
         <div className="mb-6 rounded-3xl bg-white/80 p-6 shadow-[8px_8px_20px_rgba(0,0,0,0.12),-8px_-8px_20px_rgba(255,255,255,0.9)]">
-          <p className="text-sm font-semibold text-[#C99700]">Rotary OS</p>
+          <p className="text-sm font-semibold text-[#C99700]">{appVersion.fullVersion}</p>
           <h2 className="mt-2 text-2xl font-bold">年度社務工作台</h2>
           <div className="mt-4 space-y-2 text-base font-semibold text-[#173B73]/80">
             <p>

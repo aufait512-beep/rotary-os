@@ -229,6 +229,12 @@ export default function CalendarPage() {
             </p>
             <h1 className="mt-2 text-3xl font-bold">年度行事曆</h1>
           </div>
+          <Link
+            href="/year-transition"
+            className={`block rounded-2xl bg-[#F7C948] px-4 py-3 text-center font-bold ${buttonShadow}`}
+          >
+            年度交接精靈
+          </Link>
         </header>
 
         {errorMessage ? (

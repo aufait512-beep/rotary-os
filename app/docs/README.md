@@ -35,3 +35,9 @@ Rotary OS 是「高雄晨光扶輪社年度社務管理系統」，由 Jadecode 
 網站打不開或資料讀取失敗：先看 `09_DISASTER_RECOVERY.md`。  
 換電腦或重新安裝：先看 `03_DEPLOYMENT_AND_NEW_COMPUTER.md`。  
 不確定專案規則：先看 `10_CODEX_MASTER_CONTEXT.md`。
+
+## Beta 1.0 文件狀態
+
+Rotary OS Beta 1.0 將版本資訊集中於 `lib/appVersion.ts`，並新增 `/year-transition` 年度交接精靈。交接精靈可安全帶入程序模板、活動類型、會計與資產負債科目、社費規則、年度職務、固定帳戶、月底清單與年度設定；不複製活動、程序表、出席、社費實際紀錄、會計交易、快照或月結資料。
+
+Beta 1.0 同步包含 Accounting V3.5、社費費率規則、年度職務歷程、長假單場參加、本日例會名單匯出、程序模板架構與版本資訊集中管理。

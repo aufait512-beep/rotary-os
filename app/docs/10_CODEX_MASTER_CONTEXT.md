@@ -104,3 +104,9 @@ API：`/api/assistant/parse`。
 ## 新 Codex 開場指令
 
 請先完整閱讀 docs/10_CODEX_MASTER_CONTEXT.md、docs/01_ROTARY_OS_SYSTEM_BLUEPRINT.md、docs/02_DATABASE_AND_MIGRATIONS.md，再掃描目前專案與 git status。先回報你理解的目前架構、未提交變更、資料安全風險及本次修改計畫。在我確認前，不要修改檔案，不要執行 migration，不要 commit。
+
+## Beta 1.0 交接與版本規則
+
+產品顯示版本統一讀取 `lib/appVersion.ts`，目前為 `Rotary OS Beta 1.0`，開發品牌為 Jadecode Studio，AI 助理為 Jade AI。不要在新元件中另寫版本常數。
+
+年度交接只能透過只讀預覽與 `execute_rotary_year_transition` RPC 執行。不得在前端逐筆複製後假設成功；不得複製 `events`、`programs`、`meeting_attendance`、`dues_records`、`dues_line_items`、`accounting_entries`、資產負債快照或月結紀錄。年度職務與歷屆累計餘絀必須人工確認，目前年度不可自動切換。
