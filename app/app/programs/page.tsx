@@ -216,7 +216,7 @@ export default function ProgramsPage() {
     setErrorMessage("");
     setProgramNotice("");
 
-    if (!form.eventId || !isUuid(form.eventId)) {
+    if (!form.eventId) {
       setErrorMessage("請先選擇例會活動。");
       return;
     }
@@ -614,10 +614,6 @@ function buildProgramForSave(form: ProgramFormState, eventItem: EventItem, progr
     fellowshipChair: form.fellowshipChair || eventItem.fellowshipChair,
     sergeantAtArms: form.sergeantAtArms || eventItem.sergeantAtArms,
   };
-}
-
-function isUuid(value: string) {
-  return /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{12}$/i.test(value);
 }
 
 function programToEventFallback(program: ProgramFormState): EventItem {

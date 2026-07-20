@@ -33,6 +33,7 @@ with block_defaults(template_type, block_key, title, content, start_time, sort_o
     ('board', 'opening', '主席宣布開會', '', null, 10),
     ('board', 'previous_minutes', '確認上次會議紀錄', '', null, 20),
     ('board', 'finance_report', '財務報告', '', null, 30),
+    ('board', 'upcoming_events', '未來兩個月活動預告', '{{upcoming_events}}', null, 35),
     ('board', 'proposals', '提案討論與決議', '', null, 40),
     ('board', 'motions', '臨時動議', '', null, 50),
     ('board', 'closing', '主席宣布散會', '', null, 60),
@@ -59,6 +60,16 @@ from public.program_templates t
 join block_defaults d on d.template_type = t.template_type
 where t.is_active = true
 on conflict (template_id, block_key) do nothing;
+
+-- Rename the original default board-report block without overwriting a
+-- customized title. The upcoming-events block follows it by sort order.
+update public.program_template_blocks b
+set title = '報告事項', updated_at = now()
+from public.program_templates t
+where b.template_id = t.id
+  and t.template_type = 'board'
+  and b.block_key = 'finance_report'
+  and b.title in ('財務報告', '報告事項');
 
 -- Retire the original one-line placeholder after detailed blocks exist.
 update public.program_template_blocks b
