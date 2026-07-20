@@ -338,6 +338,21 @@ export default function SmartVoucherPanel({
         useCORS: true,
         backgroundColor: "#ffffff",
         logging: false,
+        onclone: (clonedDocument) => {
+          const clonedSheet = clonedDocument.getElementById("smart-voucher-a5-sheet");
+          if (!clonedSheet) return;
+          clonedSheet.style.setProperty("background-color", "rgb(255, 255, 255)", "important");
+          clonedSheet.style.setProperty("color", "rgb(0, 0, 0)", "important");
+          clonedSheet.style.setProperty("box-shadow", "none", "important");
+          clonedSheet.querySelectorAll<HTMLElement>("*").forEach((node) => {
+            node.style.setProperty("color", "rgb(0, 0, 0)", "important");
+            node.style.setProperty("border-color", "rgb(0, 0, 0)", "important");
+            node.style.setProperty("box-shadow", "none", "important");
+            if (node.tagName === "TABLE" || node.tagName === "THEAD" || node.tagName === "TBODY" || node.tagName === "TR" || node.tagName === "TH" || node.tagName === "TD") {
+              node.style.setProperty("background-color", "rgb(255, 255, 255)", "important");
+            }
+          });
+        },
       });
       const link = document.createElement("a");
       link.href = canvas.toDataURL("image/jpeg", 0.95);
@@ -351,6 +366,53 @@ export default function SmartVoucherPanel({
     }
   }
 
+  function printVoucher() {
+    if (!savedVoucher || !draft) return setErrorMessage("請先儲存正式傳票後再列印。");
+    const element = document.getElementById("smart-voucher-a5-sheet");
+    if (!element) return setErrorMessage("找不到傳票預覽區塊。");
+
+    const frame = document.createElement("iframe");
+    frame.setAttribute("title", "A5 傳票列印");
+    frame.style.position = "fixed";
+    frame.style.width = "0";
+    frame.style.height = "0";
+    frame.style.border = "0";
+    frame.style.right = "0";
+    frame.style.bottom = "0";
+    document.body.appendChild(frame);
+
+    const printDocument = frame.contentDocument;
+    if (!printDocument) {
+      frame.remove();
+      return setErrorMessage("無法建立列印頁面。");
+    }
+    printDocument.open();
+    printDocument.write(`<!doctype html><html><head><meta charset="utf-8"><title>記帳傳票</title><style>
+      @page { size: A5 landscape; margin: 0; }
+      html, body { width: 210mm; height: 148mm; margin: 0; padding: 0; background: #fff; color: #000; }
+      * { box-sizing: border-box; color: #000 !important; border-color: #000 !important; box-shadow: none !important; }
+      #smart-voucher-a5-sheet { width: 210mm; height: 148mm; padding: 10mm; overflow: hidden; background: #fff; font-family: serif; font-size: 11px; line-height: 1.35; }
+      table { width: 100%; table-layout: fixed; border-collapse: collapse; }
+      th, td { border: 1px solid #000; padding: 5px 8px; }
+      .text-center { text-align: center; } .text-right { text-align: right; } .text-left { text-align: left; }
+      .font-bold, strong { font-weight: 700; } .border-b-2 { border-bottom: 2px solid #000; }
+      .border, .border-black { border: 1px solid #000; } .border-b { border-bottom: 1px solid #000; }
+      .grid { display: grid; } .grid-cols-2 { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+      .grid-cols-4 { grid-template-columns: repeat(4, minmax(0, 1fr)); } .col-span-2 { grid-column: span 2 / span 2; }
+      .gap-x-6 { column-gap: 24px; } .gap-y-2 { row-gap: 8px; } .gap-4 { gap: 16px; }
+      .mt-1 { margin-top: 4px; } .mt-2 { margin-top: 8px; } .mt-4 { margin-top: 16px; }
+      .mt-10 { margin-top: 40px; } .mt-12 { margin-top: 48px; } .pb-3 { padding-bottom: 12px; }
+      .p-3 { padding: 12px; } .h-10 { height: 40px; } .min-h-16 { min-height: 64px; }
+      h3, p { margin-bottom: 0; } h3 { margin-top: 0; font-size: 20px; }
+    </style></head><body>${element.outerHTML}</body></html>`);
+    printDocument.close();
+    window.setTimeout(() => {
+      frame.contentWindow?.focus();
+      frame.contentWindow?.print();
+      window.setTimeout(() => frame.remove(), 1000);
+    }, 250);
+  }
+
   return (
     <section className="min-w-0 rounded-3xl bg-white/90 p-5 shadow-[8px_8px_20px_rgba(0,0,0,0.12),-8px_-8px_20px_rgba(255,255,255,0.9)]">
       <div className="flex flex-wrap items-start justify-between gap-3">
@@ -361,7 +423,7 @@ export default function SmartVoucherPanel({
             選一筆已登錄金額，或用一句話輸入交易；系統會建議借貸科目，確認後才正式列帳。
           </p>
         </div>
-        <span className="shrink-0 rounded-full bg-[#173B73] px-3 py-1 text-xs font-bold text-white">A5 JPG</span>
+        <span className="shrink-0 rounded-full bg-[#173B73] px-3 py-1 text-xs font-bold text-white">A5 橫式</span>
       </div>
 
       {errorMessage ? <Notice tone="error">{errorMessage}</Notice> : null}
@@ -541,7 +603,7 @@ export default function SmartVoucherPanel({
           <div className="mt-5 overflow-x-auto rounded-2xl border border-[#E5D9BD] bg-[#ECE7DB] p-3">
             <div
               id="smart-voucher-a5-sheet"
-              className="mx-auto box-border h-[210mm] w-[148mm] overflow-hidden bg-white p-[10mm] font-serif text-[11px] leading-[1.45] text-black shadow-sm"
+              className="mx-auto box-border h-[148mm] w-[210mm] overflow-hidden bg-white p-[10mm] font-serif text-[11px] leading-[1.35] text-black shadow-sm"
             >
               <div className="border-b-2 border-black pb-3 text-center">
                 <h3 className="text-[20px] font-bold">高雄晨光扶輪社</h3>
@@ -580,14 +642,24 @@ export default function SmartVoucherPanel({
               <p className="mt-10 text-center text-[9px] text-gray-500">Rotary OS Beta 1.0｜Jadecode Studio</p>
             </div>
           </div>
-          <button
-            type="button"
-            disabled={!savedVoucher || isExporting}
-            onClick={() => void exportJpg()}
-            className={`mt-4 w-full rounded-2xl bg-[#F7C948] py-4 font-bold disabled:opacity-50 ${buttonShadow}`}
-          >
-            {isExporting ? "A5 JPG 產出中" : "匯出 A5 傳票 JPG"}
-          </button>
+          <div className="mt-4 grid gap-3 sm:grid-cols-2">
+            <button
+              type="button"
+              disabled={!savedVoucher || isExporting}
+              onClick={() => void exportJpg()}
+              className={`w-full rounded-2xl bg-[#F7C948] py-4 font-bold disabled:opacity-50 ${buttonShadow}`}
+            >
+              {isExporting ? "A5 JPG 產出中" : "匯出 A5 橫式 JPG"}
+            </button>
+            <button
+              type="button"
+              disabled={!savedVoucher}
+              onClick={printVoucher}
+              className={`w-full rounded-2xl bg-white py-4 font-bold disabled:opacity-50 ${buttonShadow}`}
+            >
+              列印 A5 橫式傳票
+            </button>
+          </div>
         </div>
       ) : null}
 
