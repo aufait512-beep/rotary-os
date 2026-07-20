@@ -555,6 +555,10 @@ function mapProgramFromRow(row: DbRecord): ProgramItem {
     speaker: text(row.speaker),
     fellowshipChair: text(row.fellowship_chair),
     sergeantAtArms: text(row.sergeant_at_arms),
+    upcomingRangeMode: text(row.upcoming_range_mode) || "2_months",
+    upcomingStartDate: text(row.upcoming_start_date),
+    upcomingEndDate: text(row.upcoming_end_date),
+    upcomingInsertPosition: text(row.upcoming_insert_position) || "template",
   };
 }
 
@@ -566,6 +570,10 @@ function mapProgramToRow(program: ProgramItem, includeId = true) {
     title: program.meetingName,
     fellowship_chair: program.fellowshipChair,
     sergeant_at_arms: program.sergeantAtArms,
+    upcoming_range_mode: program.upcomingRangeMode,
+    upcoming_start_date: emptyToNull(program.upcomingStartDate),
+    upcoming_end_date: emptyToNull(program.upcomingEndDate),
+    upcoming_insert_position: program.upcomingInsertPosition,
   };
 }
 

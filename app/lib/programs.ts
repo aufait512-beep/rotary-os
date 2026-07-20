@@ -12,6 +12,10 @@ export type ProgramItem = {
   speaker: string;
   fellowshipChair: string;
   sergeantAtArms: string;
+  upcomingRangeMode: string;
+  upcomingStartDate: string;
+  upcomingEndDate: string;
+  upcomingInsertPosition: string;
 };
 
 export const PROGRAMS_STORAGE_KEY = "rotary-os-programs";
@@ -29,6 +33,10 @@ export const emptyProgramItem: Omit<ProgramItem, "id"> = {
   speaker: "",
   fellowshipChair: "",
   sergeantAtArms: "",
+  upcomingRangeMode: "2_months",
+  upcomingStartDate: "",
+  upcomingEndDate: "",
+  upcomingInsertPosition: "template",
 };
 
 export function readProgramsFromStorage(): ProgramItem[] {
@@ -78,5 +86,9 @@ function normalizeProgramItem(program: Partial<ProgramItem>): ProgramItem {
     speaker: program.speaker ?? "",
     fellowshipChair: program.fellowshipChair ?? "",
     sergeantAtArms: program.sergeantAtArms ?? "",
+    upcomingRangeMode: program.upcomingRangeMode ?? "2_months",
+    upcomingStartDate: program.upcomingStartDate ?? "",
+    upcomingEndDate: program.upcomingEndDate ?? "",
+    upcomingInsertPosition: program.upcomingInsertPosition ?? "template",
   };
 }

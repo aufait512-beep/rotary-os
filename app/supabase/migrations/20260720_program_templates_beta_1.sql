@@ -2,7 +2,11 @@
 -- Safe to rerun: only inserts missing blocks and never overwrites existing edits.
 
 alter table public.programs
-  add column if not exists template_id uuid references public.program_templates(id) on delete set null;
+  add column if not exists template_id uuid references public.program_templates(id) on delete set null,
+  add column if not exists upcoming_range_mode text not null default '2_months',
+  add column if not exists upcoming_start_date date null,
+  add column if not exists upcoming_end_date date null,
+  add column if not exists upcoming_insert_position text not null default 'template';
 
 create index if not exists idx_programs_template_id on public.programs(template_id);
 

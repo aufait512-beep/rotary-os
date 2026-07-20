@@ -56,8 +56,8 @@ export default function ProgramsPage() {
     [activeEvent, form.templateId, templates]
   );
   const upcomingEvents = useMemo(
-    () => getUpcomingEvents(activeEvent, sortedEvents),
-    [activeEvent, sortedEvents]
+    () => getUpcomingEvents(activeEvent, sortedEvents, form.upcomingRangeMode, form.upcomingStartDate, form.upcomingEndDate),
+    [activeEvent, form.upcomingEndDate, form.upcomingRangeMode, form.upcomingStartDate, sortedEvents]
   );
 
   async function loadData() {
@@ -201,6 +201,10 @@ export default function ProgramsPage() {
       room: eventForProgram.room,
       topic: eventForProgram.topic,
       speaker: eventForProgram.speaker,
+      upcomingRangeMode: "2_months",
+      upcomingStartDate: "",
+      upcomingEndDate: "",
+      upcomingInsertPosition: eventForProgram.eventType.includes("理監事") ? "after_reports" : "template",
     }));
   }
 
@@ -330,6 +334,44 @@ export default function ProgramsPage() {
           </label>
 
           <label className="block">
+            <span className="text-sm font-bold">活動預告範圍</span>
+            <select
+              value={form.upcomingRangeMode}
+              onChange={(event) => setForm((currentForm) => ({ ...currentForm, upcomingRangeMode: event.target.value }))}
+              className="mt-2 w-full rounded-2xl border border-[#E5D9BD] bg-white px-4 py-3 text-base font-semibold text-[#173B73] outline-none transition focus:border-[#173B73] focus:ring-2 focus:ring-[#F7C948]"
+            >
+              <option value="30_days">未來 30 天</option>
+              <option value="2_months">未來 2 個月（預設）</option>
+              <option value="3_months">未來 3 個月</option>
+              <option value="count_3">未來 3 場</option>
+              <option value="count_5">未來 5 場</option>
+              <option value="all">全部未來活動</option>
+              <option value="custom">自訂日期範圍</option>
+            </select>
+          </label>
+
+          {form.upcomingRangeMode === "custom" ? (
+            <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
+              <TextField label="活動預告開始日期" value={form.upcomingStartDate} type="date" onChange={(value) => setForm((currentForm) => ({ ...currentForm, upcomingStartDate: value }))} />
+              <TextField label="活動預告結束日期" value={form.upcomingEndDate} type="date" onChange={(value) => setForm((currentForm) => ({ ...currentForm, upcomingEndDate: value }))} />
+            </div>
+          ) : null}
+
+          <label className="block">
+            <span className="text-sm font-bold">活動預告插入位置</span>
+            <select
+              value={form.upcomingInsertPosition}
+              onChange={(event) => setForm((currentForm) => ({ ...currentForm, upcomingInsertPosition: event.target.value }))}
+              className="mt-2 w-full rounded-2xl border border-[#E5D9BD] bg-white px-4 py-3 text-base font-semibold text-[#173B73] outline-none transition focus:border-[#173B73] focus:ring-2 focus:ring-[#F7C948]"
+            >
+              <option value="template">依模板設定</option>
+              <option value="after_reports">報告事項後</option>
+              <option value="after_secretary">秘書報告後</option>
+              <option value="bottom">程序表最下方</option>
+            </select>
+          </label>
+
+          <label className="block">
             <span className="text-sm font-bold">套用程序模板</span>
             <select
               value={form.templateId}
@@ -381,7 +423,7 @@ export default function ProgramsPage() {
               </header>
 
               <section className="program-body">
-                <ProgramTemplateContent template={activeTemplate} event={activeEvent} upcomingEvents={upcomingEvents} />
+                <ProgramTemplateContent template={activeTemplate} event={activeEvent} upcomingEvents={upcomingEvents} insertPosition={form.upcomingInsertPosition} />
               </section>
             </div>
           </div>
@@ -432,17 +474,18 @@ function Notice({ tone, children }: { tone: "error" | "info"; children: React.Re
   return <p className={"mx-auto max-w-md rounded-2xl p-4 text-sm font-bold print:hidden " + className}>{children}</p>;
 }
 
-function TextField({ label, value, onChange }: { label: string; value: string; onChange: (value: string) => void }) {
+function TextField({ label, value, onChange, type = "text" }: { label: string; value: string; onChange: (value: string) => void; type?: string }) {
   return (
     <label className="block">
       <span className="text-sm font-bold">{label}</span>
-      <input value={value} onChange={(event) => onChange(event.target.value)} className="mt-2 w-full rounded-2xl border border-[#E5D9BD] bg-white px-4 py-3 text-base text-[#173B73] outline-none transition focus:border-[#173B73] focus:ring-2 focus:ring-[#F7C948]" />
+      <input type={type} value={value} onChange={(event) => onChange(event.target.value)} className="mt-2 w-full rounded-2xl border border-[#E5D9BD] bg-white px-4 py-3 text-base text-[#173B73] outline-none transition focus:border-[#173B73] focus:ring-2 focus:ring-[#F7C948]" />
     </label>
   );
 }
 
-function ProgramTemplateContent({ template, event, upcomingEvents }: { template?: ProgramTemplate; event: EventItem; upcomingEvents: EventItem[] }) {
-  const blocks = template?.blocks.filter((block) => block.isActive && block.blockKey !== "main_agenda") ?? regularMeetingFallback();
+function ProgramTemplateContent({ template, event, upcomingEvents, insertPosition }: { template?: ProgramTemplate; event: EventItem; upcomingEvents: EventItem[]; insertPosition: string }) {
+  const sourceBlocks = template?.blocks.filter((block) => block.isActive && block.blockKey !== "main_agenda") ?? regularMeetingFallback();
+  const blocks = positionUpcomingBlock(sourceBlocks, insertPosition);
   return (
     <>
       {blocks.map((block) => {
@@ -457,6 +500,20 @@ function ProgramTemplateContent({ template, event, upcomingEvents }: { template?
       })}
     </>
   );
+}
+
+function positionUpcomingBlock(blocks: ProgramTemplateBlock[], insertPosition: string) {
+  if (insertPosition === "template") return blocks;
+  const upcoming = blocks.find((block) => block.blockKey === "upcoming_events") ?? regularMeetingFallback().find((block) => block.blockKey === "upcoming_events");
+  if (!upcoming) return blocks;
+  const withoutUpcoming = blocks.filter((block) => block.blockKey !== "upcoming_events");
+  if (insertPosition === "bottom") return [...withoutUpcoming, upcoming];
+  const keys = insertPosition === "after_reports"
+    ? ["finance_report", "reports", "club_reports"]
+    : ["president_secretary", "secretary_report", "club_reports"];
+  const targetIndex = withoutUpcoming.findLastIndex((block) => keys.includes(block.blockKey));
+  if (targetIndex < 0) return [...withoutUpcoming, upcoming];
+  return [...withoutUpcoming.slice(0, targetIndex + 1), upcoming, ...withoutUpcoming.slice(targetIndex + 1)];
 }
 
 function regularMeetingFallback(): ProgramTemplateBlock[] {
@@ -549,19 +606,32 @@ function UpcomingEventsTable({ events }: { events: EventItem[] }) {
   );
 }
 
-function getUpcomingEvents(activeEvent: EventItem, events: EventItem[]) {
+function getUpcomingEvents(activeEvent: EventItem, events: EventItem[], rangeMode: string, customStart: string, customEnd: string) {
   const activeDate = parseDate(activeEvent.date);
   if (!activeDate) return [];
-  const nextMonth = new Date(activeDate.getFullYear(), activeDate.getMonth() + 1, 1);
-  const nextMonthEnd = new Date(activeDate.getFullYear(), activeDate.getMonth() + 2, 0);
-
-  return sortEventsByDate(events.filter((eventItem) => {
+  const futureEvents = sortEventsByDate(events.filter((eventItem) => {
     const eventDate = parseDate(eventItem.date);
-    if (!eventDate || eventItem.id === activeEvent.id || eventDate <= activeDate) return false;
-    const sameMonthAfter = eventDate.getFullYear() === activeDate.getFullYear() && eventDate.getMonth() === activeDate.getMonth();
-    const inNextMonth = eventDate >= nextMonth && eventDate <= nextMonthEnd;
-    return sameMonthAfter || inNextMonth;
+    return Boolean(eventDate && eventItem.id !== activeEvent.id && eventDate > activeDate);
   }));
+  if (rangeMode === "count_3") return futureEvents.slice(0, 3);
+  if (rangeMode === "count_5") return futureEvents.slice(0, 5);
+  if (rangeMode === "all") return futureEvents;
+
+  const startDate = rangeMode === "custom" ? (parseDate(customStart) ?? new Date(activeDate.getTime() + 86_400_000)) : new Date(activeDate.getTime() + 86_400_000);
+  const endDate = rangeMode === "custom"
+    ? (parseDate(customEnd) ?? addMonths(activeDate, 2))
+    : rangeMode === "30_days"
+      ? new Date(activeDate.getTime() + 30 * 86_400_000)
+      : addMonths(activeDate, rangeMode === "3_months" ? 3 : 2);
+  return futureEvents.filter((eventItem) => {
+    const eventDate = parseDate(eventItem.date);
+    return Boolean(eventDate && eventDate >= startDate && eventDate <= endDate);
+  });
+}
+
+function addMonths(date: Date, months: number) {
+  const lastDay = new Date(date.getFullYear(), date.getMonth() + months + 1, 0).getDate();
+  return new Date(date.getFullYear(), date.getMonth() + months, Math.min(date.getDate(), lastDay));
 }
 
 function mergeProgramWithEvent(program: ProgramItem, eventItem: EventItem): ProgramItem {
@@ -595,6 +665,10 @@ function programToForm(program: ProgramItem): ProgramFormState {
     speaker: program.speaker,
     fellowshipChair: program.fellowshipChair,
     sergeantAtArms: program.sergeantAtArms,
+    upcomingRangeMode: program.upcomingRangeMode,
+    upcomingStartDate: program.upcomingStartDate,
+    upcomingEndDate: program.upcomingEndDate,
+    upcomingInsertPosition: program.upcomingInsertPosition,
   };
 }
 
@@ -613,6 +687,10 @@ function buildProgramForSave(form: ProgramFormState, eventItem: EventItem, progr
     speaker: eventItem.speaker,
     fellowshipChair: form.fellowshipChair || eventItem.fellowshipChair,
     sergeantAtArms: form.sergeantAtArms || eventItem.sergeantAtArms,
+    upcomingRangeMode: form.upcomingRangeMode,
+    upcomingStartDate: form.upcomingStartDate,
+    upcomingEndDate: form.upcomingEndDate,
+    upcomingInsertPosition: form.upcomingInsertPosition,
   };
 }
 
