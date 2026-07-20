@@ -1,6 +1,11 @@
 -- Rotary OS Beta 1.0 program templates.
 -- Safe to rerun: only inserts missing blocks and never overwrites existing edits.
 
+alter table public.programs
+  add column if not exists template_id uuid references public.program_templates(id) on delete set null;
+
+create index if not exists idx_programs_template_id on public.programs(template_id);
+
 with block_defaults(template_type, block_key, title, content, start_time, sort_order) as (
   values
     ('regular', 'fellowship', '餐敘聯誼', '', '18:30'::time, 10),
@@ -17,13 +22,13 @@ with block_defaults(template_type, block_key, title, content, start_time, sort_o
     ('regular', 'closing', '社長鳴鐘閉會', '', '20:20'::time, 120),
     ('regular', 'upcoming_events', '活動預告', '{{upcoming_events}}', null, 130),
 
-    ('birthday', 'fellowship', '餐敘聯誼', '', '18:30'::time, 10),
-    ('birthday', 'opening', '會議開始／社長鳴鐘', '', '19:15'::time, 20),
-    ('birthday', 'celebration', '慶生暨結婚紀念祝福', '', null, 30),
-    ('birthday', 'club_reports', '社長致詞／秘書報告', '', null, 40),
-    ('birthday', 'keynote', '專題分享', '{{topic}}', null, 50),
-    ('birthday', 'closing', '社長鳴鐘閉會', '', null, 60),
-    ('birthday', 'upcoming_events', '活動預告', '{{upcoming_events}}', null, 70),
+    ('celebration', 'fellowship', '餐敘聯誼', '', '18:30'::time, 10),
+    ('celebration', 'opening', '會議開始／社長鳴鐘', '', '19:15'::time, 20),
+    ('celebration', 'celebration', '慶生暨結婚紀念祝福', '', null, 30),
+    ('celebration', 'club_reports', '社長致詞／秘書報告', '', null, 40),
+    ('celebration', 'keynote', '專題分享', '{{topic}}', null, 50),
+    ('celebration', 'closing', '社長鳴鐘閉會', '', null, 60),
+    ('celebration', 'upcoming_events', '活動預告', '{{upcoming_events}}', null, 70),
 
     ('board', 'opening', '主席宣布開會', '', null, 10),
     ('board', 'previous_minutes', '確認上次會議紀錄', '', null, 20),

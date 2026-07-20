@@ -543,6 +543,7 @@ function mapEventToRow(eventItem: EventItem) {
 function mapProgramFromRow(row: DbRecord): ProgramItem {
   return {
     id: text(row.id),
+    templateId: text(row.template_id),
     eventId: text(row.event_id),
     meetingName: text(row.title),
     date: text(row.date),
@@ -561,6 +562,7 @@ function mapProgramToRow(program: ProgramItem, includeId = true) {
   return {
     ...(includeId ? { id: program.id } : {}),
     event_id: program.eventId,
+    template_id: emptyToNull(program.templateId),
     title: program.meetingName,
     fellowship_chair: program.fellowshipChair,
     sergeant_at_arms: program.sergeantAtArms,

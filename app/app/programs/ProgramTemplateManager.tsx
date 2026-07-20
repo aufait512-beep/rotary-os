@@ -8,7 +8,13 @@ import {
   updateProgramTemplateBlock,
 } from "@/lib/programTemplates";
 
-export function ProgramTemplateManager({ rotaryYearId }: { rotaryYearId: string }) {
+export function ProgramTemplateManager({
+  rotaryYearId,
+  onTemplatesChanged,
+}: {
+  rotaryYearId: string;
+  onTemplatesChanged?: (templates: ProgramTemplate[]) => void;
+}) {
   const [templates, setTemplates] = useState<ProgramTemplate[]>([]);
   const [selectedId, setSelectedId] = useState("");
   const [notice, setNotice] = useState("");
@@ -18,7 +24,9 @@ export function ProgramTemplateManager({ rotaryYearId }: { rotaryYearId: string 
     if (!rotaryYearId) return;
     try {
       const loaded = await fetchProgramTemplates(rotaryYearId);
-      setTemplates(loaded.filter((template) => template.isActive));
+      const activeTemplates = loaded.filter((template) => template.isActive);
+      setTemplates(activeTemplates);
+      onTemplatesChanged?.(loaded);
       setSelectedId((current) => current || loaded[0]?.id || "");
       setNotice("");
     } catch {

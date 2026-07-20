@@ -1,5 +1,6 @@
 export type ProgramItem = {
   id: string;
+  templateId: string;
   eventId: string;
   meetingName: string;
   date: string;
@@ -16,6 +17,7 @@ export type ProgramItem = {
 export const PROGRAMS_STORAGE_KEY = "rotary-os-programs";
 
 export const emptyProgramItem: Omit<ProgramItem, "id"> = {
+  templateId: "",
   eventId: "",
   meetingName: "",
   date: "",
@@ -64,6 +66,7 @@ export function sortProgramsByDate(programs: ProgramItem[]) {
 function normalizeProgramItem(program: Partial<ProgramItem>): ProgramItem {
   return {
     id: program.id ?? crypto.randomUUID(),
+    templateId: program.templateId ?? "",
     eventId: program.eventId ?? "",
     meetingName: program.meetingName ?? "",
     date: program.date ?? "",

@@ -52,8 +52,8 @@ export default function ProgramsPage() {
   );
   const activeEvent = selectedEvent ?? programToEventFallback(form);
   const activeTemplate = useMemo(
-    () => findTemplateForEvent(activeEvent, templates),
-    [activeEvent, templates]
+    () => templates.find((template) => template.id === form.templateId) ?? findTemplateForEvent(activeEvent, templates),
+    [activeEvent, form.templateId, templates]
   );
   const upcomingEvents = useMemo(
     () => getUpcomingEvents(activeEvent, sortedEvents),
@@ -191,6 +191,7 @@ export default function ProgramsPage() {
     setProgramNotice("此活動尚未建立程序表，請確認後儲存。");
     setForm((currentForm) => ({
       ...currentForm,
+      templateId: findTemplateForEvent(eventForProgram, templates)?.id ?? "",
       eventId: eventForProgram.id,
       meetingName: eventForProgram.title,
       date: eventForProgram.date,
@@ -328,6 +329,21 @@ export default function ProgramsPage() {
             </select>
           </label>
 
+          <label className="block">
+            <span className="text-sm font-bold">套用程序模板</span>
+            <select
+              value={form.templateId}
+              onChange={(event) => setForm((currentForm) => ({ ...currentForm, templateId: event.target.value }))}
+              className="mt-2 w-full rounded-2xl border border-[#E5D9BD] bg-white px-4 py-3 text-base font-semibold text-[#173B73] outline-none transition focus:border-[#173B73] focus:ring-2 focus:ring-[#F7C948]"
+            >
+              <option value="">依活動類型自動套用</option>
+              {templates.filter((template) => template.isActive && (!activeEvent.rotaryYearId || template.rotaryYearId === activeEvent.rotaryYearId)).map((template) => (
+                <option key={template.id} value={template.id}>{template.name}</option>
+              ))}
+            </select>
+            <p className="mt-2 text-xs font-semibold text-[#173B73]/65">選擇後，A4 預覽會立即切換；按「儲存程序表」後會記住本次選擇。</p>
+          </label>
+
           <label className="flex items-center gap-2 text-sm font-bold">
             <input type="checkbox" checked={showAllEvents} onChange={(event) => setShowAllEvents(event.target.checked)} />
             顯示所有活動
@@ -371,7 +387,7 @@ export default function ProgramsPage() {
           </div>
         </section>
 
-        <ProgramTemplateManager rotaryYearId={activeEvent.rotaryYearId} />
+        <ProgramTemplateManager rotaryYearId={activeEvent.rotaryYearId} onTemplatesChanged={setTemplates} />
 
         <section className="mx-auto max-w-md space-y-3 print:hidden">
           <h2 className="text-2xl font-bold">已儲存程序表</h2>
@@ -481,7 +497,7 @@ function resolveBlockContent(content: string, event: EventItem) {
 function findTemplateForEvent(event: EventItem, templates: ProgramTemplate[]) {
   const type = event.eventType;
   const targetType = type.includes("慶生") || type.includes("結婚")
-    ? "birthday"
+    ? "celebration"
     : type.includes("理監事")
       ? "board"
       : type.includes("社區服務")
@@ -567,6 +583,7 @@ function mergeProgramWithEvent(program: ProgramItem, eventItem: EventItem): Prog
 
 function programToForm(program: ProgramItem): ProgramFormState {
   return {
+    templateId: program.templateId,
     eventId: program.eventId,
     meetingName: program.meetingName,
     date: program.date,
@@ -584,6 +601,7 @@ function programToForm(program: ProgramItem): ProgramFormState {
 function buildProgramForSave(form: ProgramFormState, eventItem: EventItem, programId: string): ProgramItem {
   return {
     id: programId,
+    templateId: form.templateId,
     eventId: eventItem.id,
     meetingName: form.meetingName || eventItem.title,
     date: eventItem.date,
