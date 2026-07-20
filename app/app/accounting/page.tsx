@@ -53,6 +53,7 @@ type AccountingEntry = {
   referenceNo: string;
   isPassThrough: boolean;
   note: string;
+  status: string;
 };
 
 type AccountingAccount = {
@@ -148,6 +149,7 @@ const emptyEntry = {
   referenceNo: "",
   isPassThrough: false,
   note: "",
+  status: "posted",
 };
 
 export default function AccountingPage() {
@@ -299,13 +301,14 @@ export default function AccountingPage() {
   const yearCategories = categories
     .filter((category) => category.rotaryYearId === yearId && category.isActive)
     .sort((first, second) => first.sortOrder - second.sortOrder);
-  const monthEntries = entries.filter(
+  const activeEntries = entries.filter((entry) => entry.status !== "voided");
+  const monthEntries = activeEntries.filter(
     (entry) =>
       entry.rotaryYearId === yearId &&
       entry.entryDate >= monthStart &&
       entry.entryDate <= monthEnd
   );
-  const yearToDateEntries = entries.filter(
+  const yearToDateEntries = activeEntries.filter(
     (entry) =>
       entry.rotaryYearId === yearId &&
       entry.entryDate >= yearStart &&
@@ -365,7 +368,35 @@ export default function AccountingPage() {
       setErrorMessage("本月份已月結，請先解除月結後再操作。");
       return;
     }
-    if (!window.confirm("確定要刪除此收支紀錄嗎？")) return;
+    const voucherResult = await supabase
+      .from("accounting_vouchers")
+      .select("id, voucher_no, status")
+      .eq("source_entry_id", entryId)
+      .maybeSingle();
+    if (voucherResult.error) {
+      setErrorMessage("無法確認關聯傳票：" + voucherResult.error.message);
+      return;
+    }
+
+    if (voucherResult.data) {
+      const voucherNo = text(voucherResult.data.voucher_no);
+      if (!window.confirm(`這筆收支已建立傳票 ${voucherNo}，不能直接刪除。\n\n是否改為「沖銷」？沖銷後不再計入報表，但會保留歷史紀錄。`)) return;
+      const reason = window.prompt("請輸入沖銷原因：", "輸入錯誤，取消本筆收支與傳票");
+      if (reason === null) return;
+      const { error: voidError } = await supabase.rpc("void_accounting_entry_with_voucher", {
+        p_entry_id: entryId,
+        p_reason: reason,
+      });
+      if (voidError) {
+        setErrorMessage("收支與傳票沖銷失敗：" + voidError.message);
+        return;
+      }
+      setEntries((currentEntries) => currentEntries.map((item) => item.id === entryId ? { ...item, status: "voided" } : item));
+      setMessage(`傳票 ${voucherNo} 與關聯收支已沖銷，歷史紀錄仍保留。`);
+      return;
+    }
+
+    if (!window.confirm("這筆收支尚未建立傳票，確定要刪除嗎？")) return;
     const { error } = await supabase.from("accounting_entries").delete().eq("id", entryId);
     if (error) {
       setErrorMessage("收支紀錄刪除失敗：" + error.message);
@@ -393,6 +424,7 @@ export default function AccountingPage() {
       referenceNo: entry.referenceNo,
       isPassThrough: entry.isPassThrough,
       note: entry.note,
+      status: entry.status,
     });
     setTab("收支登錄");
   }
@@ -706,7 +738,7 @@ export default function AccountingPage() {
             yearId={yearId}
             month={month}
             cutoffDate={monthEnd}
-            entries={entries}
+            entries={activeEntries}
             monthCloses={monthCloses}
             onSaved={loadMonthlyBalanceSheet}
           />
@@ -1850,6 +1882,7 @@ function mapEntry(row: Record<string, unknown>): AccountingEntry {
     referenceNo: text(row.reference_no),
     isPassThrough: Boolean(row.is_pass_through),
     note: text(row.note),
+    status: text(row.status) || "posted",
   };
 }
 
@@ -1868,6 +1901,7 @@ function toEntryRow(entry: AccountingEntry) {
     reference_no: entry.referenceNo,
     is_pass_through: entry.isPassThrough,
     note: entry.note,
+    status: entry.status || "posted",
   };
 }
 
