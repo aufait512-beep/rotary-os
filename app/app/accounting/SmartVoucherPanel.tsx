@@ -391,9 +391,9 @@ export default function SmartVoucherPanel({
       @page { size: A5 landscape; margin: 0; }
       html, body { width: 210mm; height: 148mm; margin: 0; padding: 0; background: #fff; color: #000; }
       * { box-sizing: border-box; color: #000 !important; border-color: #000 !important; box-shadow: none !important; }
-      #smart-voucher-a5-sheet { width: 210mm; height: 148mm; padding: 10mm; overflow: hidden; background: #fff; font-family: serif; font-size: 11px; line-height: 1.35; }
+      #smart-voucher-a5-sheet { width: 210mm; height: 148mm; padding: 9mm 10mm; overflow: hidden; background: #fff; font-family: serif; font-size: 13pt; line-height: 1.3; }
       table { width: 100%; table-layout: fixed; border-collapse: collapse; }
-      th, td { border: 1px solid #000; padding: 5px 8px; }
+      th, td { border: 1px solid #000; padding: 5px 8px; font-size: 13pt; }
       .text-center { text-align: center; } .text-right { text-align: right; } .text-left { text-align: left; }
       .font-bold, strong { font-weight: 700; } .border-b-2 { border-bottom: 2px solid #000; }
       .border, .border-black { border: 1px solid #000; } .border-b { border-bottom: 1px solid #000; }
@@ -403,7 +403,8 @@ export default function SmartVoucherPanel({
       .mt-1 { margin-top: 4px; } .mt-2 { margin-top: 8px; } .mt-4 { margin-top: 16px; }
       .mt-10 { margin-top: 40px; } .mt-12 { margin-top: 48px; } .pb-3 { padding-bottom: 12px; }
       .p-3 { padding: 12px; } .h-10 { height: 40px; } .min-h-16 { min-height: 64px; }
-      h3, p { margin-bottom: 0; } h3 { margin-top: 0; font-size: 20px; }
+      h3, p { margin-bottom: 0; } h3 { margin-top: 0; font-size: 22pt; }
+      #smart-voucher-a5-sheet > div:first-child > p { font-size: 17pt; }
     </style></head><body>${element.outerHTML}</body></html>`);
     printDocument.close();
     window.setTimeout(() => {
@@ -603,18 +604,18 @@ export default function SmartVoucherPanel({
           <div className="mt-5 overflow-x-auto rounded-2xl border border-[#E5D9BD] bg-[#ECE7DB] p-3">
             <div
               id="smart-voucher-a5-sheet"
-              className="mx-auto box-border h-[148mm] w-[210mm] overflow-hidden bg-white p-[10mm] font-serif text-[11px] leading-[1.35] text-black shadow-sm"
+              className="mx-auto box-border h-[148mm] w-[210mm] overflow-hidden bg-white px-[10mm] py-[9mm] font-serif text-[13pt] leading-[1.3] text-black shadow-sm"
             >
               <div className="border-b-2 border-black pb-3 text-center">
-                <h3 className="text-[20px] font-bold">高雄晨光扶輪社</h3>
-                <p className="mt-1 text-[17px] font-bold">記帳傳票</p>
+                <h3 className="text-[22pt] font-bold">高雄晨光扶輪社</h3>
+                <p className="mt-1 text-[17pt] font-bold">記帳傳票</p>
               </div>
-              <div className="mt-4 grid grid-cols-2 gap-x-6 gap-y-2 text-[12px]">
+              <div className="mt-3 grid grid-cols-2 gap-x-6 gap-y-1 text-[13pt]">
                 <p>傳票號碼：<strong>{savedVoucher?.voucherNo || "草稿"}</strong></p>
                 <p className="text-right">日期：{formatDate(voucherDate)}</p>
                 <p className="col-span-2">摘要：<strong>{description}</strong></p>
               </div>
-              <table className="mt-4 w-full table-fixed border-collapse text-[11px]">
+              <table className="mt-3 w-full table-fixed border-collapse text-[13pt]">
                 <thead><tr><A5Th className="w-[14%]">借／貸</A5Th><A5Th className="w-[38%]">會計科目</A5Th><A5Th className="w-[20%]">借方金額</A5Th><A5Th className="w-[20%]">貸方金額</A5Th></tr></thead>
                 <tbody>
                   {displayLines.map((line) => (
@@ -628,18 +629,18 @@ export default function SmartVoucherPanel({
                   <tr className="font-bold"><A5Td colSpan={2}>合計</A5Td><A5Td align="right">{formatNumber(draft.amount)}</A5Td><A5Td align="right">{formatNumber(draft.amount)}</A5Td></tr>
                 </tbody>
               </table>
-              <div className="mt-4 min-h-16 border border-black p-3">
+              <div className="mt-3 min-h-14 border border-black p-2 text-[12pt]">
                 <p className="font-bold">備註</p>
                 <p className="mt-1 whitespace-pre-wrap">{note || "無"}</p>
               </div>
-              <div className="mt-4 rounded border border-black p-3 text-[10px]">
+              <div className="mt-3 rounded border border-black p-2 text-[11pt]">
                 <p>系統建議：{draft.entryType === "income" ? "收入交易，借記收款帳戶、貸記收入科目。" : "支出交易，借記支出科目、貸記付款帳戶。"}</p>
                 <p className="mt-1">借方合計 {formatCurrency(draft.amount)}｜貸方合計 {formatCurrency(draft.amount)}｜差額 0</p>
               </div>
-              <div className="mt-12 grid grid-cols-4 gap-4 text-center text-[11px]">
-                {['社長', '秘書', '會計長', '製表'].map((label) => <div key={label}><div className="h-10 border-b border-black" /><p className="mt-2">{label}</p></div>)}
+              <div className="mt-7 grid grid-cols-4 gap-4 text-center text-[12pt]">
+                {['社長', '秘書', '會計長', '製表'].map((label) => <div key={label}><div className="h-8 border-b border-black" /><p className="mt-1">{label}</p></div>)}
               </div>
-              <p className="mt-10 text-center text-[9px] text-gray-500">Rotary OS Beta 1.0｜Jadecode Studio</p>
+              <p className="mt-5 text-center text-[10pt] text-gray-500">Rotary OS Beta 1.0｜Jadecode Studio</p>
             </div>
           </div>
           <div className="mt-4 grid gap-3 sm:grid-cols-2">
