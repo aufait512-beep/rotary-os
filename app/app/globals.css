@@ -28,7 +28,7 @@ body {
 @media print {
   @page {
     size: A4 portrait;
-    margin: 20mm;
+    margin: 0;
   }
 
   html,
@@ -51,10 +51,10 @@ body {
   #program-sheet {
     position: absolute !important;
     inset: 0 auto auto 0 !important;
-    width: 170mm !important;
-    max-width: 170mm !important;
-    min-height: auto !important;
-    padding: 0 !important;
+    width: 210mm !important;
+    max-width: 210mm !important;
+    min-height: 297mm !important;
+    padding: 20mm !important;
     margin: 0 auto !important;
     background: #ffffff !important;
     box-sizing: border-box !important;
@@ -68,34 +68,6 @@ body {
   #program-sheet .program-upcoming-table tr {
     break-inside: avoid !important;
     page-break-inside: avoid !important;
-  }
-
-  #program-sheet .program-title {
-    font-size: 18px !important;
-  }
-
-  #program-sheet .program-date {
-    font-size: 10px !important;
-  }
-
-  #program-sheet .program-row {
-    padding-block: 2px !important;
-  }
-
-  #program-sheet .program-upcoming-table {
-    table-layout: fixed !important;
-    font-size: 10px !important;
-    line-height: 1.15 !important;
-  }
-
-  #program-sheet .program-upcoming-table th,
-  #program-sheet .program-upcoming-table td {
-    padding: 2px 3px !important;
-    word-break: break-word !important;
-  }
-
-  #program-sheet .speaker-session {
-    font-size: 11px !important;
   }
 
   #program-sheet .program-nowrap {
@@ -126,8 +98,8 @@ body {
   color: #000000;
   box-sizing: border-box;
   font-family: "DFKai-SB", "標楷體", "KaiTi", serif;
-  font-size: 12px;
-  line-height: 1.22;
+  font-size: 16pt;
+  line-height: 1.25;
 }
 
 .program-header {
@@ -135,47 +107,59 @@ body {
 }
 
 .program-title {
-  padding-top: 18px;
-  font-size: 18px;
+  padding-top: 12px;
+  font-size: 18pt;
 }
 
 .program-date {
-  font-size: 10px;
+  font-size: 12pt;
 }
 
 .program-body {
-  margin-top: 8px;
+  margin-top: 5px;
 }
 
 .program-row {
-  padding-block: 2px;
+  padding-block: 1.5px;
   break-inside: avoid;
   page-break-inside: avoid;
 }
 
 .program-time {
-  font-size: 12px;
+  font-size: 16pt;
+}
+
+.program-block-title {
+  font-size: 16pt;
+  font-weight: 700;
+}
+
+.program-block-content {
+  font-size: 16pt;
+  font-weight: 400;
 }
 
 .four-way-test {
-  margin-top: 6px;
+  margin-top: 2px;
+  font-size: 16pt;
+  line-height: 1.28;
 }
 
 .upcoming-events-block {
-  margin-block: 6px;
+  margin-top: 5px;
   break-inside: avoid;
   page-break-inside: avoid;
 }
 
 .program-upcoming-table {
   table-layout: fixed;
-  font-size: 10px;
-  line-height: 1.15;
+  font-size: 14pt;
+  line-height: 1.2;
 }
 
 .program-upcoming-table th,
 .program-upcoming-table td {
-  padding: 2px 4px;
+  padding: 3px 4px;
   word-break: break-word;
 }
 
@@ -185,10 +169,10 @@ body {
 }
 
 .speaker-session {
-  margin-block: 2px;
+  margin-block: 1px;
   break-inside: avoid;
   page-break-inside: avoid;
-  font-size: 11px;
+  font-size: 16pt;
 }
 
 .program-nowrap {

@@ -4,6 +4,8 @@ import Link from "next/link";
 import { FormEvent, useEffect, useMemo, useState } from "react";
 import { EventItem, sortEventsByDate } from "@/lib/events";
 import { emptyProgramItem, ProgramItem, sortProgramsByDate } from "@/lib/programs";
+import { fetchProgramTemplates, ProgramTemplate, ProgramTemplateBlock } from "@/lib/programTemplates";
+import { ProgramTemplateManager } from "./ProgramTemplateManager";
 import {
   deleteProgram,
   fetchEvents,
@@ -31,6 +33,8 @@ export default function ProgramsPage() {
   const [form, setForm] = useState<ProgramFormState>(emptyProgramItem);
   const [editingId, setEditingId] = useState<string | null>(null);
   const [isExportingPdf, setIsExportingPdf] = useState(false);
+  const [isExportingJpg, setIsExportingJpg] = useState(false);
+  const [templates, setTemplates] = useState<ProgramTemplate[]>([]);
   const [errorMessage, setErrorMessage] = useState("");
   const [programErrorMessage, setProgramErrorMessage] = useState("");
   const [programNotice, setProgramNotice] = useState("");
@@ -47,6 +51,10 @@ export default function ProgramsPage() {
     [showAllEvents, sortedEvents]
   );
   const activeEvent = selectedEvent ?? programToEventFallback(form);
+  const activeTemplate = useMemo(
+    () => findTemplateForEvent(activeEvent, templates),
+    [activeEvent, templates]
+  );
   const upcomingEvents = useMemo(
     () => getUpcomingEvents(activeEvent, sortedEvents),
     [activeEvent, sortedEvents]
@@ -57,9 +65,10 @@ export default function ProgramsPage() {
     setProgramErrorMessage("");
     setProgramNotice("");
 
-    const [eventsResult, programsResult] = await Promise.allSettled([
+    const [eventsResult, programsResult, templatesResult] = await Promise.allSettled([
       fetchEvents(),
       fetchPrograms(),
+      fetchProgramTemplates(),
     ]);
 
     if (eventsResult.status === "rejected") {
@@ -88,6 +97,7 @@ export default function ProgramsPage() {
     } else {
       setPrograms(programsResult.value);
     }
+    if (templatesResult.status === "fulfilled") setTemplates(templatesResult.value);
   }
 
   useEffect(() => {
@@ -118,7 +128,7 @@ export default function ProgramsPage() {
       await html2pdf()
         .set({
           filename: buildPdfFilename(activeEvent),
-          margin: 20,
+          margin: 0,
           image: { type: "jpeg", quality: 0.98 },
           html2canvas: {
             scale: 3,
@@ -136,6 +146,26 @@ export default function ProgramsPage() {
         .save();
     } finally {
       setIsExportingPdf(false);
+    }
+  }
+
+  async function handleExportJpg() {
+    const programSheet = document.getElementById("program-sheet");
+    if (!programSheet) return;
+    setIsExportingJpg(true);
+    try {
+      const html2canvasModule = await import("html2canvas");
+      const canvas = await html2canvasModule.default(programSheet, {
+        scale: 3,
+        useCORS: true,
+        backgroundColor: "#ffffff",
+      });
+      const link = document.createElement("a");
+      link.download = buildPdfFilename(activeEvent).replace(/\.pdf$/i, ".jpg");
+      link.href = canvas.toDataURL("image/jpeg", 0.95);
+      link.click();
+    } finally {
+      setIsExportingJpg(false);
     }
   }
 
@@ -321,6 +351,9 @@ export default function ProgramsPage() {
               <button type="button" onClick={handleExportPdf} disabled={isExportingPdf} className={"rounded-2xl bg-white px-3 py-2 text-sm font-bold text-[#173B73] disabled:opacity-60 " + buttonShadow}>
                 {isExportingPdf ? "匯出中" : "匯出 PDF"}
               </button>
+              <button type="button" onClick={handleExportJpg} disabled={isExportingJpg} className={"rounded-2xl bg-white px-3 py-2 text-sm font-bold text-[#173B73] disabled:opacity-60 " + buttonShadow}>
+                {isExportingJpg ? "匯出中" : "匯出 JPG"}
+              </button>
             </div>
           </div>
 
@@ -332,47 +365,13 @@ export default function ProgramsPage() {
               </header>
 
               <section className="program-body">
-                <ProgramRow time="19:15">
-                  <p>會議開始</p>
-                  <p>社長鳴鐘</p>
-                  <p>唱扶輪頌</p>
-                  <p>介紹主講人</p>
-                  <p>介紹社友及來賓</p>
-                  <p>唱扶輪社友我們歡迎您</p>
-
-                  <div className="four-way-test">
-                    <p>請社長帶領社友朗讀 四大考驗</p>
-                    <p>四大考驗－我們所想、所說、所做的事應事先捫心自問：</p>
-                    <p>1. 是否一切屬於真實？</p>
-                    <p>2. 是否各方得到公平？</p>
-                    <p>3. 能否促進親善友誼？</p>
-                    <p>4. 能否兼顧彼此利益？</p>
-                  </div>
-                </ProgramRow>
-
-                <ProgramRow time="19:25">
-                  <p>社長致詞</p>
-                  <p>秘書報告</p>
-                </ProgramRow>
-
-                <UpcomingEventsTable events={upcomingEvents} />
-
-                <ProgramRow time="19:35" className="speaker-session">
-                  <p className="program-nowrap" title={"講師介紹：" + (activeEvent.speaker || "-")}>講師介紹：{activeEvent.speaker || "-"}</p>
-                  <p className="program-nowrap" title={"專題演講：" + (activeEvent.topic || "-")}>專題演講：{activeEvent.topic || "-"}</p>
-                </ProgramRow>
-
-                <ProgramRow time="20:05">
-                  <p>糾察時間</p>
-                </ProgramRow>
-
-                <ProgramRow time="20:10">
-                  <p>社長鳴鐘，閉會</p>
-                </ProgramRow>
+                <ProgramTemplateContent template={activeTemplate} event={activeEvent} upcomingEvents={upcomingEvents} />
               </section>
             </div>
           </div>
         </section>
+
+        <ProgramTemplateManager rotaryYearId={activeEvent.rotaryYearId} />
 
         <section className="mx-auto max-w-md space-y-3 print:hidden">
           <h2 className="text-2xl font-bold">已儲存程序表</h2>
@@ -424,6 +423,74 @@ function TextField({ label, value, onChange }: { label: string; value: string; o
       <input value={value} onChange={(event) => onChange(event.target.value)} className="mt-2 w-full rounded-2xl border border-[#E5D9BD] bg-white px-4 py-3 text-base text-[#173B73] outline-none transition focus:border-[#173B73] focus:ring-2 focus:ring-[#F7C948]" />
     </label>
   );
+}
+
+function ProgramTemplateContent({ template, event, upcomingEvents }: { template?: ProgramTemplate; event: EventItem; upcomingEvents: EventItem[] }) {
+  const blocks = template?.blocks.filter((block) => block.isActive && block.blockKey !== "main_agenda") ?? regularMeetingFallback();
+  return (
+    <>
+      {blocks.map((block) => {
+        if (block.blockKey === "upcoming_events") return <UpcomingEventsTable key={block.id} events={upcomingEvents} />;
+        const content = resolveBlockContent(block.content, event);
+        return (
+          <ProgramRow key={block.id} time={block.startTime} className={block.blockKey === "keynote" ? "speaker-session" : ""}>
+            <p className="program-block-title">{block.title}</p>
+            {content ? <div className={block.blockKey === "four_way_test" ? "four-way-test whitespace-pre-line" : "program-block-content whitespace-pre-line"}>{content}</div> : null}
+          </ProgramRow>
+        );
+      })}
+    </>
+  );
+}
+
+function regularMeetingFallback(): ProgramTemplateBlock[] {
+  const rows: Array<[string, string, string, string]> = [
+    ["fellowship", "18:30", "餐敘聯誼", ""],
+    ["opening", "19:15", "會議開始／社長鳴鐘", ""],
+    ["rotary_song", "", "唱扶輪頌", ""],
+    ["welcome_song", "", "扶輪社友，我們歡迎您", "友社來賓參與時唱"],
+    ["four_way_test", "", "請社長帶領社友朗讀 四大考驗", "四大考驗－我們所想、所說、所做的事應事先捫心自問：\n1. 是否一切屬於真實？\n2. 是否各方得到公平？\n3. 能否促進親善友誼？\n4. 能否兼顧彼此利益？"],
+    ["introduce_guests", "", "介紹社友及來賓", ""],
+    ["introduce_speaker", "", "介紹主講人", "{{speaker}}"],
+    ["president_secretary", "19:25", "社長致詞／秘書報告", ""],
+    ["keynote", "19:35", "專題演講", "{{topic}}"],
+    ["qa", "20:10", "Q&A", ""],
+    ["sergeant", "20:15", "糾察時間", ""],
+    ["closing", "20:20", "社長鳴鐘閉會", ""],
+    ["upcoming_events", "", "活動預告", "{{upcoming_events}}"],
+  ];
+  return rows.map(([blockKey, startTime, title, content], index) => ({
+    id: `fallback-${blockKey}`,
+    templateId: "fallback",
+    blockKey,
+    title,
+    content,
+    startTime,
+    sortOrder: (index + 1) * 10,
+    isActive: true,
+  }));
+}
+
+function resolveBlockContent(content: string, event: EventItem) {
+  return content
+    .replaceAll("{{speaker}}", event.speaker || "-")
+    .replaceAll("{{topic}}", event.topic || "-")
+    .replaceAll("{{upcoming_events}}", "");
+}
+
+function findTemplateForEvent(event: EventItem, templates: ProgramTemplate[]) {
+  const type = event.eventType;
+  const targetType = type.includes("慶生") || type.includes("結婚")
+    ? "birthday"
+    : type.includes("理監事")
+      ? "board"
+      : type.includes("社區服務")
+        ? "service"
+        : type.includes("新社員") || type.includes("入社")
+          ? "induction"
+          : "regular";
+  return templates.find((template) => template.rotaryYearId === event.rotaryYearId && template.templateType === targetType)
+    ?? templates.find((template) => template.templateType === targetType);
 }
 
 function ProgramRow({ time, children, className = "" }: { time: string; children: React.ReactNode; className?: string }) {
