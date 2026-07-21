@@ -2,7 +2,6 @@ import Link from "next/link";
 import { appVersion } from "@/lib/appVersion";
 
 const menuItems = [
-  { label: "新增/管理活動", href: "/events" },
   { label: "年度行事曆", href: "/calendar" },
   { label: "📄 程序表", href: "/programs" },
   { label: "👥 社友管理", href: "/members" },
@@ -28,12 +27,14 @@ export default function Home() {
         <div className="mb-6 rounded-3xl bg-white/80 p-6 shadow-[8px_8px_20px_rgba(0,0,0,0.12),-8px_-8px_20px_rgba(255,255,255,0.9)]">
           <p className="text-sm font-semibold text-[#C99700]">{appVersion.fullVersion}</p>
           <h2 className="mt-2 text-2xl font-bold">年度社務工作台</h2>
-          <div className="mt-4 space-y-2 text-base font-semibold text-[#173B73]/80">
+          <div className="mt-4 space-y-3 text-base font-semibold leading-7 text-[#173B73]/80">
             <p>
-              整合年度行事曆、例會程序表、社友管理、社費管理及年度公益捐獻計畫，
+              整合年度行事曆、例會程序表、社友管理、<br />
+              社費管理及年度公益捐獻計畫。
             </p>
             <p>
-              提供雲端同步、A4 程序表、PDF 匯出與 AI 智慧秘書功能，
+              提供雲端同步、A4 程序表、PDF 匯出<br />
+              與 AI 智慧秘書功能。
             </p>
             <p>打造扶輪社數位化管理平台。</p>
           </div>
