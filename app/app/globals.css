@@ -70,6 +70,11 @@ body {
     page-break-inside: avoid !important;
   }
 
+  #program-sheet.program-sheet--multipage .program-discussion-row {
+    break-inside: auto !important;
+    page-break-inside: auto !important;
+  }
+
   #program-sheet .program-nowrap {
     white-space: normal !important;
     overflow: visible !important;
@@ -100,6 +105,16 @@ body {
   font-family: "DFKai-SB", "標楷體", "KaiTi", serif;
   font-size: 16pt;
   line-height: 1.25;
+}
+
+.program-sheet--multipage {
+  height: auto;
+  overflow: visible;
+}
+
+.program-sheet--multipage .program-discussion-row {
+  break-inside: auto;
+  page-break-inside: auto;
 }
 
 .program-header {

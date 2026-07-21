@@ -140,7 +140,9 @@ export default function ProgramsPage() {
             format: "a4",
             orientation: "portrait",
           },
-          pagebreak: { mode: ["avoid-all", "css", "legacy"] },
+          pagebreak: activeTemplate?.templateType === "board"
+            ? { mode: ["css", "legacy"] }
+            : { mode: ["avoid-all", "css", "legacy"] },
         })
         .from(programSheet)
         .save();
@@ -416,7 +418,10 @@ export default function ProgramsPage() {
           </div>
 
           <div className="overflow-x-auto rounded-3xl bg-white/70 p-4 shadow-[8px_8px_20px_rgba(0,0,0,0.12),-8px_-8px_20px_rgba(255,255,255,0.9)] print:overflow-visible print:rounded-none print:bg-white print:p-0 print:shadow-none">
-            <div id="program-sheet" className="program-sheet mx-auto">
+            <div
+              id="program-sheet"
+              className={`program-sheet mx-auto ${activeTemplate?.templateType === "board" ? "program-sheet--multipage" : "program-sheet--single-page"}`}
+            >
               <header className="program-header relative border-b border-black text-center">
                 <p className="program-date absolute right-0 top-0">{formatProgramDate(activeEvent.date)}</p>
                 <h2 className="program-title font-bold leading-snug">{buildProgramTitle(activeEvent)}</h2>
@@ -492,7 +497,11 @@ function ProgramTemplateContent({ template, event, upcomingEvents, insertPositio
         if (block.blockKey === "upcoming_events") return <UpcomingEventsTable key={block.id} events={upcomingEvents} />;
         const content = resolveBlockContent(block.content, event);
         return (
-          <ProgramRow key={block.id} time={block.startTime} className={block.blockKey === "keynote" ? "speaker-session" : ""}>
+          <ProgramRow
+            key={block.id}
+            time={block.startTime}
+            className={`${block.blockKey === "keynote" ? "speaker-session" : ""} ${["proposals", "motions", "discussion_items"].includes(block.blockKey) ? "program-discussion-row" : ""}`}
+          >
             <p className="program-block-title">{block.title}</p>
             {content ? <div className={block.blockKey === "four_way_test" ? "four-way-test whitespace-pre-line" : "program-block-content whitespace-pre-line"}>{content}</div> : null}
           </ProgramRow>
