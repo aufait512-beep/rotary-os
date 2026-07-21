@@ -874,7 +874,11 @@ function MemberRolePanel({ member, years, roles, onSaved }: {
         </div>
         <label className="flex items-center gap-3 text-sm font-bold">
           <input type="checkbox" checked={form.isActive}
-            onChange={(event) => setForm((current) => ({ ...current, isActive: event.target.checked }))}
+            onChange={(event) => setForm((current) => ({
+              ...current,
+              isActive: event.target.checked,
+              endDate: event.target.checked && current.endDate < getTodayDate() ? "" : current.endDate,
+            }))}
             className="h-5 w-5" />
           啟用此職務紀錄
         </label>
@@ -910,11 +914,11 @@ function MemberRolePanel({ member, years, roles, onSaved }: {
                   <button type="button" onClick={() => editRole(role)}
                     className={`rounded-xl bg-[#F7C948] px-3 py-2 text-xs font-bold ${buttonShadow}`}>編輯</button>
                   {role.isActive ? <>
-                    <button type="button" onClick={() => updateRole(role, { endDate: getTodayDate() }, "職務結束日期已更新。")}
+                    <button type="button" onClick={() => updateRole(role, { endDate: getTodayDate(), isActive: false }, "職務或資深身分已於今日結束。")}
                       className={`rounded-xl bg-white px-3 py-2 text-xs font-bold ${buttonShadow}`}>今日結束</button>
-                    <button type="button" onClick={() => updateRole(role, { isActive: false }, "錯誤職務紀錄已停用。")}
-                      className={`rounded-xl bg-white px-3 py-2 text-xs font-bold text-red-700 ${buttonShadow}`}>停用錯誤紀錄</button>
-                  </> : <button type="button" onClick={() => updateRole(role, { isActive: true }, "職務紀錄已重新啟用。")}
+                    <button type="button" onClick={() => updateRole(role, { isActive: false }, "職務紀錄已停用。")}
+                      className={`rounded-xl bg-white px-3 py-2 text-xs font-bold text-red-700 ${buttonShadow}`}>停用紀錄</button>
+                  </> : <button type="button" onClick={() => updateRole(role, { isActive: true, endDate: "" }, "職務或資深身分已重新啟用。")}
                     className={`rounded-xl bg-white px-3 py-2 text-xs font-bold ${buttonShadow}`}>重新啟用</button>}
                 </div>
               </article>
