@@ -24,6 +24,7 @@ import {
   insertDuesLineItems,
   upsertDuesRecord,
 } from "@/lib/supabaseData";
+import { DuesReferenceManager } from "./DuesReferenceManager";
 
 type DuesFormState = Omit<DuesRecord, "id" | "createdAt">;
 type NumericDuesField = "previousBalance" | "paidAmount";
@@ -390,6 +391,8 @@ export default function DuesPage() {
             <h1 className="mt-2 text-3xl font-bold">社費管理</h1>
           </div>
         </header>
+
+        <DuesReferenceManager />
 
         {errorMessage ? (
           <p className="rounded-2xl border border-red-200 bg-red-50 p-4 text-sm font-bold text-red-700">
