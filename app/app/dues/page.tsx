@@ -73,7 +73,7 @@ export default function DuesPage() {
     [records]
   );
   const currentDue = getCurrentDue(form);
-  const currentBalance = Math.max(0, form.previousBalance + currentDue - form.paidAmount);
+  const currentBalance = Math.max(0, form.previousBalance + currentDue - form.paidAmount - form.discountAmount);
 
   async function loadData() {
     try {

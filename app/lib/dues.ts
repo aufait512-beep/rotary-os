@@ -82,7 +82,8 @@ export function calculateDuesBalance(record: DuesRecord) {
   return (
     record.previousBalance +
     record.currentDue -
-    record.paidAmount
+    record.paidAmount -
+    record.discountAmount
   );
 }
 
