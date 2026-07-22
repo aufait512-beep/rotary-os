@@ -203,6 +203,10 @@ drop policy if exists "dues reference storage read" on storage.objects;
 drop policy if exists "dues reference storage insert" on storage.objects;
 drop policy if exists "dues reference storage update" on storage.objects;
 drop policy if exists "dues reference storage delete" on storage.objects;
+drop policy if exists "dues reference executive read" on storage.objects;
+drop policy if exists "dues reference executive insert" on storage.objects;
+drop policy if exists "dues reference executive update" on storage.objects;
+drop policy if exists "dues reference executive delete" on storage.objects;
 create policy "dues reference executive read" on storage.objects for select to authenticated
 using (bucket_id='dues-reference' and public.is_executive_secretary());
 create policy "dues reference executive insert" on storage.objects for insert to authenticated

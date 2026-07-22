@@ -9,6 +9,8 @@ import { EventItem, RotaryYear, sortEventsByDate } from "@/lib/events";
 import {
   deleteRotaryYear,
   fetchEvents,
+  fetchPublicEvents,
+  fetchPublicRotaryYears,
   fetchRotaryYears,
   upsertRotaryYear,
 } from "@/lib/supabaseData";
@@ -27,7 +29,8 @@ const buttonShadow =
   "shadow-[6px_6px_12px_rgba(0,0,0,0.18),-4px_-4px_10px_rgba(255,255,255,0.85)] active:translate-y-1 active:shadow-inner";
 
 export default function CalendarPage() {
-  const { profile } = useAuth();
+  const { profile, isLoading } = useAuth();
+  const isSignedIn = profile?.isActive === true;
   const canEditEvents = canManageEvents(profile?.role);
   const canManageYears = isExecutiveSecretary(profile?.role);
   const [events, setEvents] = useState<EventItem[]>([]);
@@ -41,12 +44,12 @@ export default function CalendarPage() {
   const [yearForm, setYearForm] = useState<YearFormState>(emptyYearForm);
   const [editingYearId, setEditingYearId] = useState<string | null>(null);
 
-  async function loadData() {
+  async function loadData(publicOnly: boolean) {
     try {
       setErrorMessage("");
       const [loadedYears, loadedEvents] = await Promise.all([
-        fetchRotaryYears(),
-        fetchEvents(),
+        publicOnly ? fetchPublicRotaryYears() : fetchRotaryYears(),
+        publicOnly ? fetchPublicEvents() : fetchEvents(),
       ]);
       setYears(loadedYears);
       setEvents(loadedEvents);
@@ -65,12 +68,13 @@ export default function CalendarPage() {
   }
 
   useEffect(() => {
+    if (isLoading) return;
     const timerId = window.setTimeout(() => {
-      void loadData();
+      void loadData(!profile?.isActive);
     }, 0);
 
     return () => window.clearTimeout(timerId);
-  }, []);
+  }, [isLoading, profile?.isActive, profile?.userId]);
 
   const selectedYear = years.find((year) => year.id === selectedYearId);
   const annualEvents = useMemo(() => {
@@ -535,10 +539,12 @@ export default function CalendarPage() {
                             <DetailRow label="樓層" value={eventItem.room || "-"} />
                             <DetailRow label="主講人" value={eventItem.speaker || "-"} />
                             <DetailRow label="主題" value={eventItem.topic || "-"} />
-                            <DetailRow label="聯誼長" value="-" />
-                            <DetailRow label="糾察長" value="-" />
-                            <DetailRow label="活動說明" value={eventItem.note || "-"} />
-                            <DetailRow label="備註" value={eventItem.note || "-"} />
+                            {isSignedIn ? <>
+                              <DetailRow label="聯誼長" value="-" />
+                              <DetailRow label="糾察長" value="-" />
+                              <DetailRow label="活動說明" value={eventItem.description || "-"} />
+                              <DetailRow label="備註" value={eventItem.note || "-"} />
+                            </> : null}
                             {canManageYears ? <MeetingAttendancePanel
                               eventItem={eventItem}
                               onEventUpdated={(savedEvent) =>

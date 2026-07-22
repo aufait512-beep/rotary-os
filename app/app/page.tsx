@@ -21,7 +21,9 @@ export default function Home() {
   const { profile } = useAuth();
   const visibleMenuItems = isExecutiveSecretary(profile?.role)
     ? menuItems
-    : menuItems.filter((item) => ["/calendar", "/dues", "/accounting"].includes(item.href));
+    : profile?.isActive
+      ? menuItems.filter((item) => ["/calendar", "/dues", "/accounting"].includes(item.href))
+      : menuItems.filter((item) => item.href === "/calendar");
   return (
     <main className="min-h-screen bg-[#F8F3E8] px-4 py-6 text-[#173B73]">
       <section className="mx-auto max-w-md">

@@ -7,13 +7,14 @@ import { FinancialSummaryView } from "./FinancialSummaryView";
 import { PersonalDuesView } from "./PersonalDuesView";
 import { useAuth } from "./AuthProvider";
 
-const publicPaths = ["/login", "/donate"];
+const publicPaths = ["/login", "/donate", "/calendar"];
 const executiveOnlyPaths = ["/programs", "/members", "/donations", "/assistant", "/year-transition", "/access"];
 
 export function AppAccessGate({ children }: { children: React.ReactNode }) {
   const pathname = usePathname();
   const { profile, isLoading, signOut } = useAuth();
-  if (publicPaths.some((path) => pathname.startsWith(path))) return children;
+  const isPublicPath = pathname === "/" || publicPaths.some((path) => pathname.startsWith(path));
+  if (isPublicPath) return children;
   if (isLoading) return <AccessMessage title="正在確認身分…" />;
   if (!profile) return <AccessMessage title="請先登入 Rotary OS" actionHref="/login" actionLabel="前往登入" />;
   if (!profile.isActive) return <AccessMessage title="此帳號尚未啟用" detail="請聯絡執行秘書確認使用權限。" />;

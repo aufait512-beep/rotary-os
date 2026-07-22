@@ -120,11 +120,23 @@ export async function fetchEvents() {
   return (data ?? []).map(mapEventFromRow);
 }
 
+export async function fetchPublicEvents(): Promise<EventItem[]> {
+  const { data, error } = await supabase.rpc("get_public_calendar_events");
+  if (error) throw error;
+  return (data ?? []).map(mapEventFromRow);
+}
+
 export async function fetchRotaryYears() {
   const { data, error } = await supabase
     .from("rotary_years")
     .select("*")
     .order("start_date", { ascending: true });
+  if (error) throw error;
+  return (data ?? []).map(mapRotaryYearFromRow);
+}
+
+export async function fetchPublicRotaryYears(): Promise<RotaryYear[]> {
+  const { data, error } = await supabase.rpc("get_public_rotary_years");
   if (error) throw error;
   return (data ?? []).map(mapRotaryYearFromRow);
 }
