@@ -3,6 +3,8 @@
 import Link from "next/link";
 import { FormEvent, useEffect, useMemo, useState } from "react";
 import MeetingAttendancePanel from "@/app/components/MeetingAttendancePanel";
+import { useAuth } from "@/app/components/AuthProvider";
+import { canManageEvents, isExecutiveSecretary } from "@/lib/auth";
 import { EventItem, RotaryYear, sortEventsByDate } from "@/lib/events";
 import {
   deleteRotaryYear,
@@ -25,6 +27,9 @@ const buttonShadow =
   "shadow-[6px_6px_12px_rgba(0,0,0,0.18),-4px_-4px_10px_rgba(255,255,255,0.85)] active:translate-y-1 active:shadow-inner";
 
 export default function CalendarPage() {
+  const { profile } = useAuth();
+  const canEditEvents = canManageEvents(profile?.role);
+  const canManageYears = isExecutiveSecretary(profile?.role);
   const [events, setEvents] = useState<EventItem[]>([]);
   const [years, setYears] = useState<RotaryYear[]>([]);
   const [selectedYearId, setSelectedYearId] = useState("");
@@ -229,12 +234,12 @@ export default function CalendarPage() {
             </p>
             <h1 className="mt-2 text-3xl font-bold">年度行事曆</h1>
           </div>
-          <Link
+          {canManageYears ? <Link
             href="/year-transition"
             className={`block rounded-2xl bg-[#F7C948] px-4 py-3 text-center font-bold ${buttonShadow}`}
           >
             年度交接精靈
-          </Link>
+          </Link> : null}
         </header>
 
         {errorMessage ? (
@@ -243,7 +248,7 @@ export default function CalendarPage() {
           </p>
         ) : null}
 
-        <section className="mx-auto max-w-md rounded-3xl bg-white/85 p-5 shadow-[8px_8px_20px_rgba(0,0,0,0.12),-8px_-8px_20px_rgba(255,255,255,0.9)]">
+        {canManageYears ? <section className="mx-auto max-w-md rounded-3xl bg-white/85 p-5 shadow-[8px_8px_20px_rgba(0,0,0,0.12),-8px_-8px_20px_rgba(255,255,255,0.9)]">
           <button
             type="button"
             onClick={() => {
@@ -358,7 +363,7 @@ export default function CalendarPage() {
               </div>
             </form>
           ) : null}
-        </section>
+        </section> : null}
 
         <section className="mx-auto grid max-w-md grid-cols-1 gap-3">
           {years.length === 0 ? (
@@ -391,7 +396,7 @@ export default function CalendarPage() {
                     </span>
                   ) : null}
                 </button>
-                <div className="mt-4 grid grid-cols-2 gap-3">
+                {canManageYears ? <div className="mt-4 grid grid-cols-2 gap-3">
                   <button
                     type="button"
                     onClick={() => handleEditYear(year)}
@@ -406,7 +411,7 @@ export default function CalendarPage() {
                   >
                     刪除
                   </button>
-                </div>
+                </div> : null}
               </article>
             ))
           )}
@@ -451,12 +456,12 @@ export default function CalendarPage() {
             >
               <div className="flex items-center justify-between gap-3">
                 <h2 className="text-xl font-bold">年度活動清單</h2>
-                <Link
+                {canEditEvents ? <Link
                   href="/events"
                   className={`rounded-2xl bg-[#F7C948] px-4 py-2 text-sm font-bold ${buttonShadow}`}
                 >
                   新增 / 編輯 / 刪除
-                </Link>
+                </Link> : null}
               </div>
 
               <div className="mt-5 space-y-3">
@@ -534,7 +539,7 @@ export default function CalendarPage() {
                             <DetailRow label="糾察長" value="-" />
                             <DetailRow label="活動說明" value={eventItem.note || "-"} />
                             <DetailRow label="備註" value={eventItem.note || "-"} />
-                            <MeetingAttendancePanel
+                            {canManageYears ? <MeetingAttendancePanel
                               eventItem={eventItem}
                               onEventUpdated={(savedEvent) =>
                                 setEvents((currentEvents) =>
@@ -545,8 +550,8 @@ export default function CalendarPage() {
                                   )
                                 )
                               }
-                            />
-                            <div className="grid grid-cols-2 gap-3 pt-3">
+                            /> : null}
+                            {canEditEvents ? <div className="grid grid-cols-2 gap-3 pt-3">
                               <Link
                                 href="/events"
                                 className={`rounded-2xl bg-[#F7C948] py-3 text-center font-bold text-[#173B73] ${buttonShadow}`}
@@ -572,7 +577,7 @@ export default function CalendarPage() {
                               >
                                 刪除
                               </Link>
-                            </div>
+                            </div> : null}
                           </div>
                         ) : null}
                       </article>

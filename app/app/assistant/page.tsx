@@ -25,6 +25,7 @@ import {
   upsertDuesRecord,
   upsertEvent,
 } from "@/lib/supabaseData";
+import { supabase } from "@/src/lib/supabase";
 
 type ParsedEvent = {
   event_type: string;
@@ -234,9 +235,13 @@ export default function AssistantPage() {
     setIsParsing(true);
 
     try {
+      const { data: sessionData } = await supabase.auth.getSession();
       const response = await fetch("/api/assistant/parse", {
         method: "POST",
-        headers: { "Content-Type": "application/json" },
+        headers: {
+          "Content-Type": "application/json",
+          Authorization: `Bearer ${sessionData.session?.access_token ?? ""}`,
+        },
         body: JSON.stringify({
           inputText,
           activeYear: activeYear

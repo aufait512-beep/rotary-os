@@ -1,5 +1,7 @@
 import type { Metadata } from "next";
 import AppFooter from "@/app/components/AppFooter";
+import { AppAccessGate } from "@/app/components/AppAccessGate";
+import { AuthProvider } from "@/app/components/AuthProvider";
 import { appVersion } from "@/lib/appVersion";
 import "./globals.css";
 
@@ -30,8 +32,10 @@ export default function RootLayout({
       className="h-full antialiased"
     >
       <body className="min-h-full flex flex-col">
-        {children}
-        <AppFooter />
+        <AuthProvider>
+          <AppAccessGate>{children}</AppAccessGate>
+          <AppFooter />
+        </AuthProvider>
       </body>
     </html>
   );

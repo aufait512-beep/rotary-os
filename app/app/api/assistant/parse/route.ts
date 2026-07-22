@@ -1,4 +1,5 @@
 import { NextResponse } from "next/server";
+import { createClient } from "@supabase/supabase-js";
 
 type ParseRequest = {
   inputText?: string;
@@ -53,6 +54,16 @@ const eventSchema = {
 };
 
 export async function POST(request: Request) {
+  const accessToken = request.headers.get("authorization")?.replace(/^Bearer\s+/i, "") ?? "";
+  const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL;
+  const supabaseKey = process.env.NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY ?? process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY;
+  if (!accessToken || !supabaseUrl || !supabaseKey) return NextResponse.json({ error: "請先以執行秘書身分登入。" }, { status: 401 });
+  const authClient = createClient(supabaseUrl, supabaseKey, { global: { headers: { Authorization: `Bearer ${accessToken}` } } });
+  const { data: userData, error: userError } = await authClient.auth.getUser(accessToken);
+  if (userError || !userData.user) return NextResponse.json({ error: "登入狀態已失效，請重新登入。" }, { status: 401 });
+  const { data: profile } = await authClient.from("app_users").select("role, is_active").eq("user_id", userData.user.id).maybeSingle();
+  if (!profile?.is_active || profile.role !== "executive_secretary") return NextResponse.json({ error: "只有執行秘書可以使用 Jade AI。" }, { status: 403 });
+
   const apiKey = process.env.OPENAI_API_KEY;
   if (!apiKey) {
     return NextResponse.json(

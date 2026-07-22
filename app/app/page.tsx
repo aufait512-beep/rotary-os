@@ -1,5 +1,9 @@
+"use client";
+
 import Link from "next/link";
 import { appVersion } from "@/lib/appVersion";
+import { isExecutiveSecretary } from "@/lib/auth";
+import { useAuth } from "@/app/components/AuthProvider";
 
 const menuItems = [
   { label: "年度行事曆", href: "/calendar" },
@@ -10,9 +14,14 @@ const menuItems = [
   { label: "❤️ 年度捐獻計畫", href: "/donations" },
   { label: "Jade AI 助理", href: "/assistant" },
   { label: "年度交接精靈", href: "/year-transition" },
+  { label: "🔐 身分權限", href: "/access" },
 ];
 
 export default function Home() {
+  const { profile } = useAuth();
+  const visibleMenuItems = isExecutiveSecretary(profile?.role)
+    ? menuItems
+    : menuItems.filter((item) => ["/calendar", "/dues", "/accounting"].includes(item.href));
   return (
     <main className="min-h-screen bg-[#F8F3E8] px-4 py-6 text-[#173B73]">
       <section className="mx-auto max-w-md">
@@ -41,7 +50,7 @@ export default function Home() {
         </div>
 
         <nav className="grid grid-cols-2 gap-4">
-          {menuItems.map((item) => (
+          {visibleMenuItems.map((item) => (
             <Link
               href={item.href}
               key={item.label}
