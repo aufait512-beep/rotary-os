@@ -284,6 +284,41 @@ export async function upsertDuesRecord(record: DuesRecord, lineItems = record.li
   return mapDuesRecordFromRow(data, nextLineItems);
 }
 
+export async function updateDuesRecord(record: DuesRecord, lineItems = record.lineItems, options: { replaceLineItems?: boolean } = {}) {
+  const shouldReplaceLineItems = options.replaceLineItems ?? true;
+  const normalizedRecord = {
+    ...record,
+    currentDue: sumLineItems(lineItems) || record.currentDue,
+  };
+  const { data, error } = await supabase
+    .from("dues_records")
+    .update(mapDuesRecordToRow(normalizedRecord))
+    .eq("id", record.id)
+    .select()
+    .single();
+  if (error) throw error;
+
+  const recordId = text(data.id);
+  const nextLineItems = lineItems.map((item) => ({ ...item, duesRecordId: recordId }));
+
+  if (shouldReplaceLineItems) {
+    const { error: deleteError } = await supabase
+      .from("dues_line_items")
+      .delete()
+      .eq("dues_record_id", recordId);
+    if (deleteError) throw deleteError;
+
+    if (nextLineItems.length > 0) {
+      const { error: insertError } = await supabase
+        .from("dues_line_items")
+        .insert(nextLineItems.map(mapDuesLineItemToRow));
+      if (insertError) throw insertError;
+    }
+  }
+
+  return mapDuesRecordFromRow(data, nextLineItems);
+}
+
 export async function deleteDuesRecord(recordId: string) {
   const lineItemDelete = await supabase
     .from("dues_line_items")

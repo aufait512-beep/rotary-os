@@ -22,6 +22,7 @@ import {
   fetchMeetingAttendance,
   fetchMembers,
   insertDuesLineItems,
+  updateDuesRecord,
   upsertDuesRecord,
 } from "@/lib/supabaseData";
 import { DuesReferenceManager } from "./DuesReferenceManager";
@@ -119,11 +120,14 @@ export default function DuesPage() {
     try {
       if (editingId) {
         const currentRecord = records.find((record) => record.id === editingId);
-        const savedRecord = await upsertDuesRecord({
+        const nextRecord = {
           ...form,
           currentDue,
           id: editingId,
           createdAt: currentRecord?.createdAt ?? new Date().toISOString(),
+        };
+        const savedRecord = await updateDuesRecord(nextRecord, form.lineItems, {
+          replaceLineItems: !areDuesLineItemsEqual(currentRecord?.lineItems ?? [], form.lineItems),
         });
         setRecords((currentRecords) =>
           currentRecords.map((record) => (record.id === editingId ? savedRecord : record))
@@ -1121,6 +1125,22 @@ function getCurrentMonth() {
 function getCurrentDue(record: Pick<DuesRecord, "currentDue" | "lineItems">) {
   if (record.lineItems.length === 0) return record.currentDue;
   return record.lineItems.reduce((total, item) => total + item.amount, 0);
+}
+
+function areDuesLineItemsEqual(firstItems: DuesLineItem[], secondItems: DuesLineItem[]) {
+  if (firstItems.length !== secondItems.length) return false;
+  const normalizeItem = (item: DuesLineItem) => ({
+    id: item.id,
+    duesRecordId: item.duesRecordId,
+    itemType: item.itemType,
+    itemName: item.itemName,
+    serviceDate: item.serviceDate,
+    quantity: item.quantity,
+    unitAmount: item.unitAmount,
+    amount: item.amount,
+    note: item.note,
+  });
+  return JSON.stringify(firstItems.map(normalizeItem)) === JSON.stringify(secondItems.map(normalizeItem));
 }
 
 function getStatementLineItems(record: DuesRecord) {
