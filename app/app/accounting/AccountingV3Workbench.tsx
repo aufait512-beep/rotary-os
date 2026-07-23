@@ -142,7 +142,7 @@ const checklistItems = [
 ] as const;
 
 const lineItemLabels: Record<string, string> = {
-  annual_fee: "常年社費",
+  annual_fee: "常年會費",
   meal: "例會餐費",
   special_donation: "特別捐款",
   red_box: "慶典紅箱",
@@ -744,7 +744,7 @@ function buildPostingPreview(payment: Payment, allocations: Allocation[], record
 
 function findLineItemCategory(itemType: string, categories: Category[]) {
   const keywords: Record<string, string[]> = {
-    annual_fee: ["常年", "社費"],
+    annual_fee: ["常年會費", "常年社費", "常年費"],
     meal: ["餐費"],
     special_donation: ["特別捐", "捐款"],
     red_box: ["紅箱"],
@@ -752,6 +752,11 @@ function findLineItemCategory(itemType: string, categories: Category[]) {
     pass_through: ["代收"],
   };
   const candidates = categories.filter((category) => category.entryType === "income" && category.isActive);
+  if (itemType === "annual_fee") {
+    return candidates.find((category) =>
+      ["常年會費", "常年社費", "常年費"].includes(category.name.trim())
+    );
+  }
   return candidates.find((category) => (keywords[itemType] ?? []).some((keyword) => `${category.groupName}${category.name}`.includes(keyword)));
 }
 

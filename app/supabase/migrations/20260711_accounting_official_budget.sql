@@ -14,7 +14,7 @@
 with official(entry_type, group_name, name, sort_order) as (
   values
     ('income', '1.社費收入', '入社費', 1010),
-    ('income', '1.社費收入', '常年社費', 1020),
+    ('income', '1.社費收入', '常年會費', 1020),
     ('income', '1.社費收入', '特別捐款', 1030),
     ('income', '2.捐款IOU收入', '捐款IOU收入', 2010),
     ('income', '3.例會餐費', '例會餐費', 3010),
@@ -70,7 +70,7 @@ where c.rotary_year_id = target_year.id
 with official(entry_type, group_name, name, sort_order) as (
   values
     ('income', '1.社費收入', '入社費', 1010),
-    ('income', '1.社費收入', '常年社費', 1020),
+    ('income', '1.社費收入', '常年會費', 1020),
     ('income', '1.社費收入', '特別捐款', 1030),
     ('income', '2.捐款IOU收入', '捐款IOU收入', 2010),
     ('income', '3.例會餐費', '例會餐費', 3010),
@@ -140,7 +140,7 @@ where not exists (
 with official(entry_type, name) as (
   values
     ('income', '入社費'),
-    ('income', '常年社費'),
+    ('income', '常年會費'),
     ('income', '特別捐款'),
     ('income', '捐款IOU收入'),
     ('income', '例會餐費'),
@@ -270,3 +270,4 @@ where not exists (
     and b.item_type = official_balance.item_type
     and b.name = official_balance.name
 );
+
