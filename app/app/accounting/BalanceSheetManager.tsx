@@ -264,17 +264,35 @@ export default function BalanceSheetManager({
       };
     });
 
-    const valueResult = await supabase
+    const deleteExistingValues = await supabase
       .from("accounting_balance_values")
-      .upsert(valuePayloads, { onConflict: "snapshot_id,category_id" });
-    if (valueResult.error) {
-      setErrorMessage(getErrorMessage(valueResult.error, "資產負債金額儲存失敗"));
+      .delete()
+      .eq("snapshot_id", savedSnapshot.id);
+    if (deleteExistingValues.error) {
+      setErrorMessage(getErrorMessage(deleteExistingValues.error, "資產負債舊金額清理失敗"));
       return;
     }
 
+    if (valuePayloads.length > 0) {
+      const valueResult = await supabase
+        .from("accounting_balance_values")
+        .insert(valuePayloads);
+      if (valueResult.error) {
+        setErrorMessage(getErrorMessage(valueResult.error, "資產負債金額儲存失敗"));
+        return;
+      }
+    }
+
     setSnapshot(savedSnapshot);
-    setMessage("資產負債表草稿已儲存。");
-    await loadBalanceSheet();
+    const nextValues: Record<string, string> = {};
+    valuePayloads.forEach((valuePayload) => {
+      const category = displayCategories.find((item) => item.id === valuePayload.category_id);
+      if (!isSystemYearBalance(category)) {
+        nextValues[valuePayload.category_id] = String(valuePayload.amount);
+      }
+    });
+    setValues(nextValues);
+    setMessage("資產負債表已儲存，可繼續編輯。");
     onSaved?.();
   }
 
