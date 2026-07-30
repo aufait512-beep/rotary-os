@@ -10,21 +10,10 @@ export default function manifest(): MetadataRoute.Manifest {
     scope: "/",
     display: "standalone",
     background_color: "#FFFFFF",
-    theme_color: "#F7C948",
+    theme_color: "#17458F",
     icons: [
       {
-        src: "/sunlight-icon-48x48.png",
-        sizes: "48x48",
-        type: "image/png",
-      },
-      {
-        src: "/android-chrome-192x192.png",
-        sizes: "192x192",
-        type: "image/png",
-        purpose: "any",
-      },
-      {
-        src: "/android-chrome-512x512.png",
+        src: "/sunlight-rotary-logo.png?v=6",
         sizes: "512x512",
         type: "image/png",
         purpose: "any",
@@ -32,3 +21,4 @@ export default function manifest(): MetadataRoute.Manifest {
     ],
   };
 }
+
