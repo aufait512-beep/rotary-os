@@ -325,8 +325,17 @@ export default function BalanceSheetManager({
             node.style.setProperty("border-color", "rgb(70, 70, 70)", "important");
           });
           clonedSheet.querySelectorAll<HTMLInputElement>('input[type="number"]').forEach((input) => {
-            input.style.setProperty("background-color", "rgb(255, 255, 255)", "important");
-            input.style.setProperty("color", "rgb(0, 0, 0)", "important");
+            const printedAmount = clonedDocument.createElement("span");
+            printedAmount.textContent = formatCurrency(toNumber(input.value));
+            printedAmount.setAttribute("aria-hidden", "true");
+            printedAmount.style.setProperty("display", "block");
+            printedAmount.style.setProperty("width", "100%");
+            printedAmount.style.setProperty("padding", "0.5rem 0");
+            printedAmount.style.setProperty("color", "rgb(0, 0, 0)", "important");
+            printedAmount.style.setProperty("font-weight", "700");
+            printedAmount.style.setProperty("text-align", "right");
+            printedAmount.style.setProperty("white-space", "nowrap");
+            input.replaceWith(printedAmount);
           });
         },
       });
@@ -949,4 +958,4 @@ function number(value: unknown) {
 function getErrorMessage(error: unknown, fallback: string) {
   return error instanceof Error ? `${fallback}：${error.message}` : fallback;
 }
-// Vercel deployment sync: donation board and balance sheet release.
+
