@@ -104,6 +104,7 @@ export default function BalanceSheetManager({
   const [message, setMessage] = useState("");
   const [errorMessage, setErrorMessage] = useState("");
   const [isLoading, setIsLoading] = useState(false);
+  const [isExportingJpg, setIsExportingJpg] = useState(false);
 
   const selectedYear = years.find((year) => year.id === yearId);
   const reportMonth = month ? `${month}-01` : "";
@@ -294,6 +295,52 @@ export default function BalanceSheetManager({
     setValues(nextValues);
     setMessage("資產負債表已儲存，可繼續編輯。");
     onSaved?.();
+  }
+
+  async function exportBalanceSheetJpg() {
+    const element = document.getElementById("accounting-balance-sheet-v2");
+    if (!element) {
+      setErrorMessage("找不到資產負債表預覽區塊。");
+      return;
+    }
+
+    setIsExportingJpg(true);
+    setErrorMessage("");
+    try {
+      await document.fonts.ready;
+      const html2canvasModule = await import("html2canvas");
+      const canvas = await html2canvasModule.default(element, {
+        scale: 2.5,
+        useCORS: true,
+        backgroundColor: "#ffffff",
+        logging: false,
+        onclone: (clonedDocument) => {
+          const clonedSheet = clonedDocument.getElementById("accounting-balance-sheet-v2");
+          if (!clonedSheet) return;
+          clonedSheet.style.setProperty("background-color", "rgb(255, 255, 255)", "important");
+          clonedSheet.style.setProperty("color", "rgb(0, 0, 0)", "important");
+          clonedSheet.style.setProperty("box-shadow", "none", "important");
+          clonedSheet.querySelectorAll<HTMLElement>("*").forEach((node) => {
+            node.style.setProperty("box-shadow", "none", "important");
+            node.style.setProperty("border-color", "rgb(70, 70, 70)", "important");
+          });
+          clonedSheet.querySelectorAll<HTMLInputElement>('input[type="number"]').forEach((input) => {
+            input.style.setProperty("background-color", "rgb(255, 255, 255)", "important");
+            input.style.setProperty("color", "rgb(0, 0, 0)", "important");
+          });
+        },
+      });
+      const link = document.createElement("a");
+      link.href = canvas.toDataURL("image/jpeg", 0.95);
+      link.download = `高雄晨光扶輪社_資產負債表_${month || reportDate}.jpg`;
+      link.click();
+      setMessage("資產負債表 JPG 已匯出，可直接列印。");
+    } catch (error) {
+      console.error(error);
+      setErrorMessage(getErrorMessage(error, "資產負債表 JPG 匯出失敗"));
+    } finally {
+      setIsExportingJpg(false);
+    }
   }
 
   async function carryPreviousMonth() {
@@ -499,7 +546,7 @@ export default function BalanceSheetManager({
               disabled={isClosed || isLoading}
               className={`w-full rounded-2xl bg-[#F7C948] px-4 py-3 font-bold disabled:opacity-50 ${buttonShadow}`}
             >
-              儲存月底餘額
+              儲存各項目金額
             </button>
           </div>
         </div>
@@ -545,6 +592,35 @@ export default function BalanceSheetManager({
             />
           </div>
         ) : null}
+      </section>
+
+      <section className="rounded-3xl border border-[#E5D9BD] bg-[#FFF7D6] p-4 print:hidden">
+        <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+          <div>
+            <h2 className="text-lg font-bold">各項目金額輸入與儲存</h2>
+            <p className="mt-1 text-sm font-semibold text-[#173B73]/75">
+              請直接在下方每一列輸入金額，包含銀行活存、銀行定存、零用金、應收款與歷屆累計餘絀，再按儲存。
+            </p>
+          </div>
+          <div className="flex shrink-0 flex-wrap gap-2">
+            <button
+              type="button"
+              onClick={saveSnapshot}
+              disabled={isClosed || isLoading}
+              className={`rounded-2xl bg-[#F7C948] px-4 py-3 text-sm font-bold disabled:opacity-50 ${buttonShadow}`}
+            >
+              儲存各項目金額
+            </button>
+            <button
+              type="button"
+              onClick={exportBalanceSheetJpg}
+              disabled={isLoading || isExportingJpg}
+              className={`rounded-2xl bg-white px-4 py-3 text-sm font-bold disabled:opacity-50 ${buttonShadow}`}
+            >
+              {isExportingJpg ? "JPG 產出中" : "匯出資產負債表 JPG"}
+            </button>
+          </div>
+        </div>
       </section>
 
       <section id="accounting-balance-sheet-v2" className="rounded-3xl bg-white p-5 text-black">
@@ -681,7 +757,7 @@ function BalanceColumn({
                   const isYearBalance = isSystemYearBalance(category);
                   const amount = isYearBalance ? finalYearBalance : toNumber(values[category.id]);
                   return (
-                    <label key={category.id} className="grid grid-cols-[1fr_150px] items-center gap-3 text-sm">
+                    <label key={category.id} className="grid grid-cols-[minmax(0,1fr)_132px] items-center gap-3 text-sm sm:grid-cols-[minmax(0,1fr)_150px]">
                       <span className="min-w-0 break-words">{category.name}</span>
                       {isYearBalance ? (
                         <span className="text-right font-bold">{formatCurrency(amount)}</span>
@@ -691,7 +767,8 @@ function BalanceColumn({
                           value={values[category.id] ?? "0"}
                           disabled={disabled}
                           onChange={(event) => onChange(category.id, event.target.value)}
-                          className="w-full rounded-xl border border-[#E5D9BD] px-3 py-2 text-right disabled:bg-[#F8F3E8]"
+                          aria-label={`${groupName}－${category.name}金額`}
+                          className="w-full rounded-xl border-2 border-[#D8C899] bg-[#FFFDF7] px-3 py-2 text-right font-bold disabled:bg-[#F8F3E8]"
                         />
                       )}
                     </label>
