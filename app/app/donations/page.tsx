@@ -543,7 +543,61 @@ export default function DonationsPage() {
                                   plans={plans}
                                   isEditing={editingRecordId === record.id}
                                   recordForm={recordForm}
-                                  onE…436 tokens truncated…       type="button"
+                                  onEdit={editRecord}
+                                  onDelete={deleteRecord}
+                                  onSave={saveRecord}
+                                  onChange={setRecordForm}
+                                  onCancel={() => {
+                                    setRecordForm(null);
+                                    setEditingRecordId(null);
+                                  }}
+                                />
+                              ))
+                            )}
+                          </div>
+                        </td>
+                      </tr>
+                    ) : null}
+                  </tbody>
+                );
+              })}
+            </table>
+          </div>
+          {sortedPlans.length === 0 && !isLoading ? (
+            <p className="p-8 text-center font-bold text-[#173B73]/65">
+              尚未建立捐獻計畫，請點上方「新增捐獻計畫」。
+            </p>
+          ) : null}
+        </section>
+      </section>
+    </main>
+  );
+}
+
+function PlanEditor({
+  form,
+  editingPlanId,
+  onSubmit,
+  onCancel,
+  onChange,
+}: {
+  form: PlanFormState;
+  editingPlanId: string | null;
+  onSubmit: (event: FormEvent<HTMLFormElement>) => void;
+  onCancel: () => void;
+  onChange: (form: PlanFormState) => void;
+}) {
+  return (
+    <form
+      onSubmit={onSubmit}
+      className="space-y-4 overflow-hidden rounded-3xl bg-white/85 p-5 shadow-[8px_8px_20px_rgba(0,0,0,0.12),-8px_-8px_20px_rgba(255,255,255,0.9)] transition-all"
+    >
+      <div className="flex items-center justify-between gap-3">
+        <h2 className="text-xl font-bold">
+          {editingPlanId ? "編輯捐獻計畫" : "新增捐獻計畫"}
+        </h2>
+        <button
+          type="button"
           onClick={onCancel}
           className={`rounded-2xl bg-white px-4 py-2 text-sm font-bold ${buttonShadow}`}
         >
@@ -1158,4 +1212,3 @@ function escapeCsvValue(value: string) {
   const escapedValue = value.replaceAll('"', '""');
   return `"${escapedValue}"`;
 }
-
