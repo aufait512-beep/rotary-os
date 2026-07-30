@@ -949,3 +949,4 @@ function number(value: unknown) {
 function getErrorMessage(error: unknown, fallback: string) {
   return error instanceof Error ? `${fallback}：${error.message}` : fallback;
 }
+// Vercel deployment sync: donation board and balance sheet release.
