@@ -7,7 +7,7 @@ import { FinancialSummaryView } from "./FinancialSummaryView";
 import { PersonalDuesView } from "./PersonalDuesView";
 import { useAuth } from "./AuthProvider";
 
-const publicPaths = ["/login", "/donate", "/calendar"];
+const publicPaths = ["/login", "/donate", "/calendar", "/appointment"];
 const executiveOnlyPaths = ["/programs", "/members", "/donations", "/assistant", "/year-transition", "/access"];
 
 export function AppAccessGate({ children }: { children: React.ReactNode }) {
