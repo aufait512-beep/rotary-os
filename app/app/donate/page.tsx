@@ -694,4 +694,3 @@ function formatPlanAmount(plan: DonationPlan, value: number) {
     maximumFractionDigits: 0,
   }).format(value);
 }
-
