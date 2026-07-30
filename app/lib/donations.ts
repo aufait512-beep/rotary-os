@@ -687,4 +687,3 @@ function isRecord(value: unknown): value is Record<string, unknown> {
 function createId() {
   return globalThis.crypto?.randomUUID?.() ?? `${Date.now()}-${Math.random()}`;
 }
-
