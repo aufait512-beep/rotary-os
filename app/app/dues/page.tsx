@@ -1,4 +1,4 @@
-
+﻿
 "use client";
 
 import Link from "next/link";
@@ -571,7 +571,190 @@ export default function DuesPage() {
         ) : null}
         <section className="grid grid-cols-1 gap-3">
           <div className="rounded-3xl bg-white/85 p-5 shadow-[8px_8px_20px_rgba(0,0,0,0.12),-8px_-8px_20px_rgba(255,255,255,0.9)]">
-            <p className="text-sm font-…2218 tokens truncated…onst status = getDuesPaymentStatus(record);
+            <p className="text-sm font-bold text-[#C99700]">未繳總額</p>
+            <p className="mt-1 text-3xl font-bold">{formatCurrency(totalUnpaid)}</p>
+          </div>
+        </section>
+
+        <section className="space-y-4 rounded-3xl bg-white/85 p-5 shadow-[8px_8px_20px_rgba(0,0,0,0.12),-8px_-8px_20px_rgba(255,255,255,0.9)]">
+          <div>
+            <p className="text-sm font-bold text-[#C99700]">例會餐費串接</p>
+            <h2 className="mt-1 text-2xl font-bold">本月餐費帶入社費</h2>
+          </div>
+          <div className="grid grid-cols-1 gap-3 sm:grid-cols-[1fr_auto]">
+            <label className="block">
+              <span className="text-sm font-bold">選擇月份</span>
+              <input
+                type="month"
+                value={mealMonth}
+                onChange={(event) => setMealMonth(event.target.value)}
+                className="mt-2 w-full rounded-2xl border border-[#E5D9BD] bg-white px-4 py-3 outline-none focus:border-[#173B73] focus:ring-2 focus:ring-[#F7C948]"
+              />
+            </label>
+            <button
+              type="button"
+              onClick={() => void loadMonthlyMealRows()}
+              disabled={isLoadingMeals}
+              className={`self-end rounded-2xl bg-[#F7C948] px-5 py-3 font-bold disabled:opacity-60 ${buttonShadow}`}
+            >
+              {isLoadingMeals ? "讀取中" : "產生本月餐費預覽"}
+            </button>
+          </div>
+
+          {mealImportMessage ? (
+            <p className="rounded-2xl bg-[#F8F3E8] p-3 text-sm font-bold">
+              {mealImportMessage}
+            </p>
+          ) : null}
+
+          {mealRows.length > 0 ? (
+            <div className="space-y-3">
+              <div className="grid grid-cols-2 gap-3 text-center text-sm font-bold">
+                <div className="rounded-2xl bg-[#F8F3E8] p-3">
+                  <p className="text-[#173B73]/70">可帶入筆數</p>
+                  <p className="mt-1 text-xl">{selectedMealKeys.length}</p>
+                </div>
+                <div className="rounded-2xl bg-[#F8F3E8] p-3">
+                  <p className="text-[#173B73]/70">預計帶入總額</p>
+                  <p className="mt-1 text-xl">
+                    {formatCurrency(
+                      mealRows
+                        .filter((row) => selectedMealKeys.includes(row.key))
+                        .reduce(
+                          (total, row) =>
+                            total +
+                            Math.max(0, editedMealAmounts[row.key] ?? row.attendance.mealAmount),
+                          0
+                        )
+                    )}
+                  </p>
+                </div>
+              </div>
+
+              {mealRows.map((row) => {
+                const selected = selectedMealKeys.includes(row.key);
+                const disabled = !row.duesRecord || row.alreadyImported;
+
+                return (
+                  <article key={row.key} className="rounded-3xl border border-[#E5D9BD] bg-white p-4">
+                    <div className="flex flex-wrap items-start justify-between gap-3">
+                      <label className="flex min-w-0 items-start gap-3">
+                        <input
+                          type="checkbox"
+                          checked={selected}
+                          disabled={disabled}
+                          onChange={(event) =>
+                            setSelectedMealKeys((currentKeys) =>
+                              event.target.checked
+                                ? [...currentKeys, row.key]
+                                : currentKeys.filter((key) => key !== row.key)
+                            )
+                          }
+                          className="mt-1 h-5 w-5"
+                        />
+                        <span className="min-w-0">
+                          <span className="block break-words text-base font-bold">
+                            {formatMemberName(row.member)}
+                          </span>
+                          <span className="mt-1 block break-words text-sm font-semibold text-[#173B73]/75">
+                            {formatDate(row.eventItem.date)}｜第{row.eventItem.meetingNo || "-"}次例會｜{row.eventItem.title || "例會"}
+                          </span>
+                        </span>
+                      </label>
+                      <span
+                        className={`shrink-0 rounded-full px-3 py-1 text-xs font-bold ${
+                          row.alreadyImported
+                            ? "bg-[#173B73] text-white"
+                            : row.duesRecord
+                              ? "bg-[#F7C948] text-[#173B73]"
+                              : "bg-[#F47C6C] text-white"
+                        }`}
+                      >
+                        {row.alreadyImported
+                          ? "已帶入"
+                          : row.duesRecord
+                            ? "可帶入"
+                            : "尚無社費紀錄"}
+                      </span>
+                    </div>
+                    <div className="mt-3 grid grid-cols-1 gap-3 sm:grid-cols-2">
+                      <label className="block">
+                        <span className="text-sm font-bold">該場餐費</span>
+                        <input
+                          type="number"
+                          min={0}
+                          value={editedMealAmounts[row.key] ?? row.attendance.mealAmount}
+                          onChange={(event) =>
+                            setEditedMealAmounts((currentAmounts) => ({
+                              ...currentAmounts,
+                              [row.key]: Number(event.target.value) || 0,
+                            }))
+                          }
+                          disabled={disabled}
+                          className="mt-2 w-full rounded-2xl border border-[#E5D9BD] px-3 py-3 disabled:bg-[#F8F3E8]"
+                        />
+                      </label>
+                      <div className="rounded-2xl bg-[#F8F3E8] p-3 text-sm font-bold">
+                        <p>用餐：{row.attendance.actualMeal ? "是" : "否"}</p>
+                        <p>帶入社費：{row.attendance.includeInDues ? "是" : "否"}</p>
+                        {!row.duesRecord ? (
+                          <p className="mt-1 text-[#F47C6C]">
+                            該社友尚未建立此月份社費紀錄
+                          </p>
+                        ) : null}
+                      </div>
+                    </div>
+                  </article>
+                );
+              })}
+
+              <button
+                type="button"
+                onClick={() => void importMonthlyMealRows()}
+                disabled={isImportingMeals}
+                className={`w-full rounded-2xl bg-[#173B73] py-4 font-bold text-white disabled:opacity-60 ${buttonShadow}`}
+              >
+                {isImportingMeals ? "帶入中" : "帶入本月社費"}
+              </button>
+            </div>
+          ) : null}
+        </section>
+
+        <section className="space-y-3">
+          <div className="flex items-center justify-between gap-3">
+            <h2 className="text-2xl font-bold">社費紀錄</h2>
+            <button
+              type="button"
+              onClick={exportCsv}
+              className={`rounded-2xl bg-[#F7C948] px-4 py-2 text-sm font-bold ${buttonShadow}`}
+            >
+              匯出 CSV
+            </button>
+          </div>
+
+          <label className="block">
+            <span className="text-sm font-bold">依月份篩選</span>
+            <input
+              type="month"
+              value={filterMonth}
+              onChange={(event) => setFilterMonth(event.target.value)}
+              className="mt-2 w-full rounded-2xl border border-[#E5D9BD] bg-white px-4 py-3 outline-none focus:border-[#173B73] focus:ring-2 focus:ring-[#F7C948]"
+            />
+          </label>
+
+          {filteredRecords.length === 0 ? (
+            <div className="rounded-3xl bg-white/75 p-5 text-center font-semibold text-[#173B73]/70 shadow-[6px_6px_16px_rgba(0,0,0,0.1),-6px_-6px_16px_rgba(255,255,255,0.8)]">
+              目前沒有社費紀錄
+            </div>
+          ) : (
+            filteredRecords.map((record) => {
+              const isExpanded = expandedRecordId === record.id;
+              const isPreviewOpen = previewRecordId === record.id;
+              const member = sortedMembers.find((memberItem) => memberItem.id === record.memberId);
+              const memberName = member
+                ? formatMemberName(member)
+                : getMemberName(record.memberId, sortedMembers);
+              const status = getDuesPaymentStatus(record);
 
               return (
                 <article
@@ -1065,4 +1248,3 @@ function escapeCsvValue(value: string) {
 function getErrorMessage(error: unknown, fallback: string) {
   return error instanceof Error ? `${fallback}：${error.message}` : fallback;
 }
-
