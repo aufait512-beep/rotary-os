@@ -6,17 +6,19 @@ import { appVersion } from "@/lib/appVersion";
 import "./globals.css";
 
 export const metadata: Metadata = {
-  title: `高雄晨光扶輪社｜${appVersion.fullVersion}`,
+  title: {
+    default: `高雄晨光扶輪社｜${appVersion.fullVersion}`,
+    template: `%s｜高雄晨光扶輪社`,
+  },
   description: appVersion.systemPositioning,
   manifest: "/manifest.webmanifest",
   icons: {
     icon: [
-      { url: "/favicon.ico", sizes: "any" },
-      { url: "/sunlight-icon-32x32.png", sizes: "32x32", type: "image/png" },
-      { url: "/sunlight-icon-48x48.png", sizes: "48x48", type: "image/png" },
+      { url: "/sunlight-icon-32x32.png?v=6", sizes: "32x32", type: "image/png" },
+      { url: "/sunlight-icon-48x48.png?v=6", sizes: "48x48", type: "image/png" },
     ],
     apple: [
-      { url: "/apple-touch-icon.png", sizes: "180x180", type: "image/png" },
+      { url: "/sunlight-rotary-logo.png?v=6", sizes: "512x512", type: "image/png" },
     ],
   },
 };
@@ -40,3 +42,5 @@ export default function RootLayout({
     </html>
   );
 }
+
+
