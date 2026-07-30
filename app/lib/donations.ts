@@ -9,6 +9,11 @@ export type DonationPlan = {
   title: string;
   description: string;
   suggestedAmountText: string;
+  unitAmount: number;
+  currency: string;
+  targetUnits: number;
+  sourceLabel: string;
+  sourceUrl: string;
   startDate: string;
   endDate: string;
   status: DonationPlanStatus;
@@ -50,70 +55,184 @@ export const donationCategories: DonationCategory[] = [
 
 export const defaultDonationPlans: DonationPlan[] = [
   {
-    id: "paul-harris-fellow-2026",
+    id: "f33744f1-113d-43c4-92d7-77c20f982d72",
     category: "全球計畫",
-    title: "保羅哈里斯捐獻",
-    description: "支持扶輪基金會年度計畫與全球服務。",
-    suggestedAmountText: "捐獻美金 1,000 元，可獲頒 Paul Harris Fellow",
-    startDate: "",
-    endDate: "",
+    title: "保羅哈里斯認捐",
+    description:
+      "保羅哈里斯之友（PHF）認捐：個人捐至年度基金、根除小兒麻痺或核准的獎助金專案，累計達 US$1,000，或透過表彰積點轉移達成。總表以 1 單位 US$1,000 登錄認捐。",
+    suggestedAmountText:
+      "1 單位代表 US$1,000；本項只登錄認捐，不自動換算台幣社費。",
+    unitAmount: 1000,
+    currency: "USD",
+    targetUnits: 0,
+    sourceLabel: "國際扶輪 3510 地區｜扶輪基金的捐獻項目及表彰說明",
+    sourceUrl:
+      "https://www.rid3510.org/eventdetail.html?actid=4B94D0BF-7412-4999-9A8E-3D70582C8FF6",
+    startDate: "2026-07-01",
+    endDate: "2026-10-30",
     status: "open",
     sortOrder: 1,
   },
   {
-    id: "polio-plus-2026",
-    category: "全球計畫",
-    title: "根除小兒麻痺",
-    description: "支持國際扶輪根除小兒麻痺計畫。",
-    suggestedAmountText: "歡迎自由捐獻，持續支持根除小兒麻痺行動",
-    startDate: "",
-    endDate: "",
-    status: "open",
-    sortOrder: 2,
-  },
-  {
-    id: "rotary-education-foundation-2026",
+    id: "d1406338-af77-423c-877c-6647aa5b254c",
     category: "地區計畫",
     title: "中華扶輪教育基金",
-    description: "支持中華扶輪教育基金培育優秀人才。",
-    suggestedAmountText: "歡迎依年度認捐方案自由填寫金額",
-    startDate: "",
-    endDate: "",
-    status: "open",
-    sortOrder: 1,
-  },
-  {
-    id: "slow-flying-angels-2026",
-    category: "地區計畫",
-    title: "慢飛天使",
-    description: "支持慢飛天使相關服務與照顧計畫。",
-    suggestedAmountText: "歡迎自由捐獻",
-    startDate: "",
-    endDate: "",
-    status: "open",
-    sortOrder: 2,
-  },
-  {
-    id: "longmu-camera-2026",
-    category: "地區計畫",
-    title: "龍目國小相機捐贈",
-    description: "募集數位相機，協助龍目國小教學與活動紀錄。",
-    suggestedAmountText: "每台相機新台幣 4,000 元",
+    description: "支持教育相關公益計畫。",
+    suggestedAmountText: "自由捐獻",
+    unitAmount: 0,
+    currency: "TWD",
+    targetUnits: 0,
+    sourceLabel: "國際扶輪 3510 地區｜中華扶輪基金",
+    sourceUrl: "https://www.rid3510.org/index.html",
     startDate: "",
     endDate: "",
     status: "open",
     sortOrder: 3,
   },
   {
-    id: "club-service-fund-2026",
+    id: "41bf86bb-05fe-40b8-82a5-992175d5bba4",
+    category: "地區計畫",
+    title: "伊甸基金會慢飛天使",
+    description:
+      "支持伊甸基金會的慢飛天使（發展遲緩兒童）計畫，您可以透過線上定期或單筆捐款，直接成為早療家庭的堅強後盾，幫助孩子克服成長困境。",
+    suggestedAmountText: "自由捐獻",
+    unitAmount: 0,
+    currency: "TWD",
+    targetUnits: 0,
+    sourceLabel: "",
+    sourceUrl: "",
+    startDate: "2026-07-01",
+    endDate: "2027-06-30",
+    status: "open",
+    sortOrder: 4,
+  },
+  {
+    id: "53b8147c-643e-4e73-b394-81be1639d298",
     category: "社內計畫",
-    title: "社內服務基金",
-    description: "支持高雄晨光扶輪社年度社內服務與公益行動。",
-    suggestedAmountText: "歡迎自由捐獻",
+    title: "小鄉社造志業聯盟-相機捐贈",
+    description:
+      "小鄉社造立背景：莫拉克風災後（2010年左右），在官方重建資源退場時生長出來。\n120公分，是一個孩子的視線高度。\n\n我們把相機交給長輩和孩子，\n讓他們用自己的眼睛拍下生活。\n不要求照片漂亮，只問一句話：\n「你為什麼拍這張？」\n一張照片，打開一個故事；\n一個故事，\n讓我們看見一個家庭真正需要什麼。",
+    suggestedAmountText:
+      "120公分的視角(社長計畫 小鄉相機捐助)\n目標48台。\n每台相機新台幣 4,000 元，共計19萬2000元\n歡迎社友自由捐獻",
+    unitAmount: 4000,
+    currency: "TWD",
+    targetUnits: 48,
+    sourceLabel: "社內捐獻計畫",
+    sourceUrl: "",
+    startDate: "2026-07-03",
+    endDate: "2026-12-30",
+    status: "open",
+    sortOrder: 1,
+  },
+  {
+    id: "42fd7796-5139-4e2f-8df9-917f50abf537",
+    category: "社內計畫",
+    title: "例會IOU紅箱",
+    description:
+      "例會IOU紅箱，費用將登錄在本月社費繳交明細中。\n\n友社社友，填寫後可在備註中寫明收據寄送地址，\n或於例會結束後請執秘開立收據。",
+    suggestedAmountText:
+      "例會IOU紅箱，您的每一份捐獻都將帶來美好的豐收",
+    unitAmount: 0,
+    currency: "TWD",
+    targetUnits: 0,
+    sourceLabel: "社內捐獻計畫",
+    sourceUrl: "",
     startDate: "",
     endDate: "",
     status: "open",
     sortOrder: 1,
+  },
+  {
+    id: "6e421a37-a2f2-4f71-91d7-1f4db75921ef",
+    category: "全球計畫",
+    title: "年度基金 EREY",
+    description:
+      "Every Rotarian, Every Year（每位社員、每年捐獻）鼓勵每位社友持續支持扶輪基金年度基金。3510 地區說明：全社年度計畫基金平均捐獻超過美金 100 元，且每位社員都有捐獻，可符合 EREY Club 表彰要件。",
+    suggestedAmountText:
+      "參考統計單位為每位社員每年 US$100；實際捐獻與匯率請由執行秘書依當年度地區通知確認。",
+    unitAmount: 100,
+    currency: "USD",
+    targetUnits: 26,
+    sourceLabel: "國際扶輪 3510 地區｜EREY 線上繳款操作說明",
+    sourceUrl:
+      "https://www.rid3510.org/eventdetail.html?actid=F7B9E262-5FF1-44D1-B315-C03EC24F9711",
+    startDate: "",
+    endDate: "",
+    status: "closed",
+    sortOrder: 2,
+  },
+  {
+    id: "7b2ef9b5-ccae-41b6-a822-ad1d3f678926",
+    category: "全球計畫",
+    title: "保羅哈里斯會 PHS",
+    description:
+      "Paul Harris Society 會員承諾每年至少捐獻 US$1,000，可捐至年度基金、小兒麻痺或核准的獎助金專案。",
+    suggestedAmountText:
+      "1 單位代表每年承諾捐獻 US$1,000；美元項目不會直接併入台幣社費。",
+    unitAmount: 1000,
+    currency: "USD",
+    targetUnits: 0,
+    sourceLabel: "國際扶輪 3510 地區｜扶輪基金的捐獻項目及表彰說明",
+    sourceUrl:
+      "https://www.rid3510.org/eventdetail.html?actid=4B94D0BF-7412-4999-9A8E-3D70582C8FF6",
+    startDate: "",
+    endDate: "",
+    status: "closed",
+    sortOrder: 3,
+  },
+  {
+    id: "b3d18fa0-af3d-49ed-97ad-738ba71b47d2",
+    category: "全球計畫",
+    title: "捐助基金 Benefactor",
+    description:
+      "Benefactor（捐助人）表彰適用於捐助基金（原永久基金）；3510 地區資料列出的資格為捐獻至少 US$1,000。",
+    suggestedAmountText:
+      "1 單位代表 US$1,000；美元項目不會直接併入台幣社費。",
+    unitAmount: 1000,
+    currency: "USD",
+    targetUnits: 0,
+    sourceLabel: "國際扶輪 3510 地區｜扶輪基金的捐獻項目及表彰說明",
+    sourceUrl:
+      "https://www.rid3510.org/eventdetail.html?actid=4B94D0BF-7412-4999-9A8E-3D70582C8FF6",
+    startDate: "",
+    endDate: "",
+    status: "closed",
+    sortOrder: 4,
+  },
+  {
+    id: "394023f8-f236-4a35-bcd5-2521bb0618ec",
+    category: "全球計畫",
+    title: "終結小兒麻痺 PolioPlus",
+    description:
+      "支持國際扶輪根除小兒麻痺工作。此捐獻亦可計入 PHF、PHS 等相關扶輪基金表彰，但實際金額可由社友自由選擇。",
+    suggestedAmountText: "自由捐獻；請由執行秘書確認當年度收款與換匯方式。",
+    unitAmount: 0,
+    currency: "USD",
+    targetUnits: 0,
+    sourceLabel: "國際扶輪 3510 地區｜扶輪基金的捐獻項目及表彰說明",
+    sourceUrl:
+      "https://www.rid3510.org/eventdetail.html?actid=4B94D0BF-7412-4999-9A8E-3D70582C8FF6",
+    startDate: "",
+    endDate: "",
+    status: "closed",
+    sortOrder: 5,
+  },
+  {
+    id: "e2bd04c3-6b29-41ad-beb1-da59c9061561",
+    category: "地區計畫",
+    title: "3510 綠色奇蹟｜再生電腦",
+    description:
+      "募集與整理可再利用的電腦設備，支持在地非營利組織、偏鄉學校及弱勢族群。此為實物支持型計畫，預設不列金額；執行秘書可在確認本年度募集方式後設定單位與開放狀態。",
+    suggestedAmountText: "實物捐贈／待執行秘書確認本年度募集規格。",
+    unitAmount: 0,
+    currency: "TWD",
+    targetUnits: 0,
+    sourceLabel: "國際扶輪 3510 地區｜綠色奇蹟再生電腦支持專案",
+    sourceUrl: "https://www.rid3510.org/pcdonation.html",
+    startDate: "",
+    endDate: "",
+    status: "closed",
+    sortOrder: 5,
   },
 ];
 
@@ -122,6 +241,11 @@ export const emptyDonationPlan: Omit<DonationPlan, "id"> = {
   title: "",
   description: "",
   suggestedAmountText: "",
+  unitAmount: 0,
+  currency: "TWD",
+  targetUnits: 0,
+  sourceLabel: "",
+  sourceUrl: "",
   startDate: "",
   endDate: "",
   status: "open",
@@ -368,6 +492,11 @@ function normalizeDonationPlan(planInput: unknown): DonationPlan {
     description: stripParagraphTags(getText(plan, "description", "計畫內容")),
     suggestedAmountText:
       suggestedAmountText || getText(plan, "suggested_amount_text"),
+    unitAmount: getNumber(plan, "unitAmount", "unit_amount"),
+    currency: getText(plan, "currency") || "TWD",
+    targetUnits: getNumber(plan, "targetUnits", "target_units"),
+    sourceLabel: getText(plan, "sourceLabel", "source_label"),
+    sourceUrl: getText(plan, "sourceUrl", "source_url"),
     startDate: getText(plan, "startDate", "start_date", "開始日期"),
     endDate: getText(plan, "endDate", "end_date", "截止日期"),
     status:
@@ -461,6 +590,11 @@ function toDonationPlanRow(plan: DonationPlan) {
     title: plan.title,
     description: plan.description,
     suggested_amount_text: plan.suggestedAmountText,
+    unit_amount: plan.unitAmount,
+    currency: plan.currency,
+    target_units: plan.targetUnits,
+    source_label: plan.sourceLabel || null,
+    source_url: plan.sourceUrl || null,
     start_date: plan.startDate || null,
     end_date: plan.endDate || null,
     status: plan.status,
@@ -553,3 +687,4 @@ function isRecord(value: unknown): value is Record<string, unknown> {
 function createId() {
   return globalThis.crypto?.randomUUID?.() ?? `${Date.now()}-${Math.random()}`;
 }
+
