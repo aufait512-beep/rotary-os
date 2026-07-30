@@ -11,7 +11,7 @@ const menuItems = [
   { label: "👥 社友管理", href: "/members" },
   { label: "💰 社費管理", href: "/dues" },
   { label: "📊 會計收支", href: "/accounting" },
-  { label: "❤️ 年度捐獻計畫", href: "/donations" },
+  { label: "❤️ 年度捐獻計畫後台", href: "/donations" },
   { label: "Jade AI 助理", href: "/assistant" },
   { label: "年度交接精靈", href: "/year-transition" },
   { label: "🔐 身分權限", href: "/access" },
@@ -68,10 +68,11 @@ export default function Home() {
             href="/donate"
             className="block rounded-2xl bg-white px-4 py-3 text-center text-sm font-bold text-[#173B73] shadow-[6px_6px_12px_rgba(0,0,0,0.14),-4px_-4px_10px_rgba(255,255,255,0.85)] active:translate-y-1 active:shadow-inner"
           >
-            🔗 社友捐獻登記連結
+            ❤️ 最新社友年度捐獻總表
           </Link>
         </div>
       </section>
     </main>
   );
 }
+
