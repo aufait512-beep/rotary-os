@@ -289,12 +289,12 @@ export default function DonatePage() {
             ← 左右滑動查看所有捐獻計畫 →
           </div>
           <div className="max-h-[72vh] overflow-auto overscroll-contain">
-            <table className="w-max min-w-full border-separate border-spacing-0 text-[15px] sm:text-base">
+            <table className="w-max min-w-full border-separate border-spacing-0 text-[13px] sm:text-sm">
               <thead className="sticky top-0 z-30">
                 <tr>
-                  <th className="sticky left-0 z-40 w-[128px] min-w-[128px] border-b border-r border-[#D8C899] bg-[#173B73] px-3 py-4 text-left text-white sm:w-[190px] sm:min-w-[190px]">
+                  <th className="sticky left-0 z-40 w-[96px] min-w-[96px] border-b border-r border-[#D8C899] bg-[#173B73] px-2 py-2 text-left text-white sm:w-[118px] sm:min-w-[118px]">
                     社友姓名
-                    <span className="mt-1 block text-xs font-semibold text-white/70">
+                    <span className="block text-[10px] font-semibold text-white/70">
                       {members.length} 人
                     </span>
                   </th>
@@ -303,25 +303,25 @@ export default function DonatePage() {
                     return (
                       <th
                         key={plan.id}
-                        className={`w-[126px] min-w-[126px] border-b border-r border-[#D8C899] px-2 py-1.5 align-top sm:w-[145px] sm:min-w-[145px] ${
+                        className={`w-[116px] min-w-[116px] border-b border-r border-[#D8C899] px-1.5 py-1 align-top sm:w-[128px] sm:min-w-[128px] ${
                           stats.donors === 0 ? "bg-[#FFE1DC]" : "bg-[#F7C948]"
                         }`}
                       >
                         <button
                           type="button"
                           onClick={() => setSelectedPlan(plan)}
-                          className="min-h-9 w-full rounded-lg px-1 py-1 text-left text-sm font-black leading-5 underline decoration-2 underline-offset-4 focus:outline-none focus:ring-2 focus:ring-[#173B73] sm:text-base"
+                          className="min-h-8 w-full rounded-lg px-1 py-0.5 text-left text-[12px] font-black leading-4 underline decoration-2 underline-offset-2 focus:outline-none focus:ring-2 focus:ring-[#173B73] sm:text-[13px]"
                         >
                           {plan.title}
                         </button>
-                        <span className="block text-xs font-bold text-[#173B73]/70">
+                        <span className="block text-[10px] font-bold leading-4 text-[#173B73]/70">
                           {stats.donors === 0 ? "尚無人參與" : `${stats.donors} 人參與`}
                         </span>
                       </th>
                     );
                   })}
-                  <th className="sticky right-0 z-40 w-[130px] min-w-[130px] border-b border-l border-[#D8C899] bg-[#173B73] px-3 py-4 text-right text-white sm:w-[160px] sm:min-w-[160px]">
-                    社友合計
+                  <th className="sticky right-0 z-40 w-[82px] min-w-[82px] border-b border-l border-[#D8C899] bg-[#173B73] px-2 py-2 text-right text-white sm:w-[96px] sm:min-w-[96px]">
+                    合計
                   </th>
                 </tr>
               </thead>
@@ -346,6 +346,7 @@ export default function DonatePage() {
                   </tr>
                 ) : (
                   members.map((member, memberIndex) => {
+                    const memberName = splitMemberDisplayName(member.displayName);
                     const memberRecords = visibleRecords.filter((record) =>
                       record.memberId
                         ? record.memberId === member.id
@@ -366,11 +367,18 @@ export default function DonatePage() {
                       <tr key={member.id} className={memberIndex % 2 ? "bg-[#FFFCF4]" : "bg-white"}>
                         <th
                           scope="row"
-                          className={`sticky left-0 z-20 border-b border-r border-[#E5D9BD] px-3 py-3 text-left font-extrabold leading-6 ${
+                          className={`sticky left-0 z-20 border-b border-r border-[#E5D9BD] px-2 py-2 text-left ${
                             memberIndex % 2 ? "bg-[#FFFCF4]" : "bg-white"
                           }`}
                         >
-                          {member.displayName}
+                          <span className="block break-words text-[13px] font-extrabold leading-4">
+                            {memberName.chinese}
+                          </span>
+                          {memberName.english ? (
+                            <span className="mt-0.5 block break-words text-[10px] font-semibold leading-3 text-[#173B73]/65">
+                              {memberName.english}
+                            </span>
+                          ) : null}
                         </th>
                         {plans.map((plan) => {
                           const cellRecords = memberRecords.filter(
@@ -399,7 +407,7 @@ export default function DonatePage() {
                                 onClick={() =>
                                   setEditingCell({ member, plan, quantity: currentQuantity })
                                 }
-                                className={`min-h-14 w-full rounded-lg px-1 py-1 font-extrabold leading-5 disabled:cursor-not-allowed disabled:opacity-50 ${
+                                className={`min-h-11 w-full rounded-md px-1 py-0.5 text-[12px] font-extrabold leading-4 disabled:cursor-not-allowed disabled:opacity-50 ${
                                   cellAmount > 0
                                     ? "bg-[#FFF1A8] text-[#A35C00]"
                                     : "bg-white text-[#173B73]/35"
@@ -411,25 +419,25 @@ export default function DonatePage() {
                                     {totalQuantity > 0 ? (
                                       <span className="block">{totalQuantity} 單位</span>
                                     ) : null}
-                                    <span className="block text-xs">
+                                    <span className="block text-[10px]">
                                       {formatPlanAmount(plan, cellAmount)}
                                     </span>
                                   </>
                                 ) : (
-                                  <span>—<span className="block text-xs">點選填寫</span></span>
+                                  <span>—<span className="block text-[10px]">點選</span></span>
                                 )}
                               </button>
                             </td>
                           );
                         })}
                         <td
-                          className={`sticky right-0 z-20 border-b border-l border-[#E5D9BD] px-3 py-3 text-right font-black ${
+                          className={`sticky right-0 z-20 border-b border-l border-[#E5D9BD] px-2 py-2 text-right text-[12px] font-black leading-4 ${
                             memberIndex % 2 ? "bg-[#FFFCF4]" : "bg-white"
                           }`}
                         >
                           <span className="block">{formatTwd(memberTwdTotal)}</span>
                           {memberUsdTotal > 0 ? (
-                            <span className="block text-xs">US$ {memberUsdTotal.toLocaleString("zh-TW")}</span>
+                            <span className="block text-[10px]">US$ {memberUsdTotal.toLocaleString("zh-TW")}</span>
                           ) : null}
                         </td>
                       </tr>
@@ -439,7 +447,7 @@ export default function DonatePage() {
               </tbody>
               <tfoot className="sticky bottom-0 z-30">
                 <tr>
-                  <th className="sticky left-0 z-40 border-r border-t border-[#D8C899] bg-[#173B73] px-3 py-4 text-left text-white">
+                  <th className="sticky left-0 z-40 border-r border-t border-[#D8C899] bg-[#173B73] px-2 py-2 text-left text-white">
                     計畫累積
                   </th>
                   {plans.map((plan) => {
@@ -447,7 +455,7 @@ export default function DonatePage() {
                     return (
                       <td
                         key={plan.id}
-                        className="border-r border-t border-[#D8C899] bg-[#FFF3B5] px-2 py-3 text-center font-black leading-6"
+                        className="border-r border-t border-[#D8C899] bg-[#FFF3B5] px-1 py-2 text-center text-[11px] font-black leading-4"
                       >
                         <span className="block">{stats.units} 單位</span>
                         <span className="block text-[#A35C00]">
@@ -456,7 +464,7 @@ export default function DonatePage() {
                       </td>
                     );
                   })}
-                  <td className="sticky right-0 z-40 border-l border-t border-[#D8C899] bg-[#173B73] px-3 py-4 text-right font-black text-white">
+                  <td className="sticky right-0 z-40 border-l border-t border-[#D8C899] bg-[#173B73] px-2 py-2 text-right text-[11px] font-black leading-4 text-white">
                     <span className="block">{formatTwd(twdTotal)}</span>
                     <span className="block text-xs">US$ {usdTotal.toLocaleString("zh-TW")}</span>
                   </td>
@@ -685,6 +693,16 @@ function formatTwd(value: number) {
     currency: "TWD",
     maximumFractionDigits: 0,
   }).format(value);
+}
+
+function splitMemberDisplayName(displayName: string) {
+  const normalizedName = displayName.trim().replace(/\s+/g, " ");
+  const match = normalizedName.match(/^([\u3400-\u9fff·・]{2,})(?:\s+(.+))?$/);
+  if (!match) return { chinese: normalizedName, english: "" };
+  return {
+    chinese: match[1],
+    english: match[2] ?? "",
+  };
 }
 
 function formatPlanAmount(plan: DonationPlan, value: number) {
